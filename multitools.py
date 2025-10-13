@@ -14,10 +14,25 @@ def generalized_dirichlet(n_samples, k, alpha, beta):
                 samples[i, j] = betas[i, j] * (1 - q)
                 q += samples[i, j]
     return samples
+def make_pos_def(corr):
+    eigvals, eigvecs = np.linalg.eigh(corr)
+    eigvals[eigvals < 1e-8] = 1e-8  
+    corr_pd = eigvecs @ np.diag(eigvals) @ eigvecs.T
 
-def gamma_GC(r, n, shape,scale):
-    mean = np.zeros(np.shape(r)[0])
-    z = np.random.multivariate_normal(mean, r, size=n)
+    # normalize diagonal to 1
+    d = np.sqrt(np.diag(corr_pd))
+    corr_pd = corr_pd / d[:, None] / d[None, :]
+    return corr_pd
+def gamma_GC(R, n, shape,scale):
+    R = make_pos_def(R)
+    mean = np.zeros(np.shape(R)[0])
+    z = np.random.multivariate_normal(mean, R, size=n)
     u = stats.norm.cdf(z)
-    data = stats.gamma.ppf(u, a=shape, scale=scale)
+    data = np.zeros_like(u)
+    for i in range(u.shape[1]):
+        data[:, i] = stats.gamma.ppf(u[:, i], a=shape[i], scale=scale[i])
     return data
+
+
+
+
