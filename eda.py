@@ -130,7 +130,7 @@ class KnapsackEDA:
     """
     
     def __init__(self, items, capacity, n_selected, n_obj, pop_size=1000, 
-                 generations=100, seed=1123):
+                 generations=100, max_no_improve_gen=20, seed=1123):
         """
         Initialize EDA algorithm.
         
@@ -157,6 +157,7 @@ class KnapsackEDA:
         self.n_obj = n_obj
         self.pop_size = pop_size
         self.generations = generations
+        self.max_no_improve_gen = max_no_improve_gen
         self.rng = random.default_rng(seed=seed)
         
         # State variables (will be initialized during run)
@@ -260,22 +261,51 @@ class KnapsackEDA:
         self.distribution, self.selected_population, self.selected_objectives = \
             self._generate_initial_population()
         
-        # Run generations
-        for g in range(self.generations):
-            print(f"Generation {g+1}/{self.generations}", end='\r', flush=True)
+        # Run generations (fixed number of generations)
+        # for g in range(self.generations):
+        #     print(f"Generation {g+1}/{self.generations}")
+        #     self.distribution, self.selected_population, self.selected_objectives, \
+        #         pareto_indices, js_div = self._update_distribution()
+            
+        #     pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
+        #     for k in range(pareto_indices.shape[0]):
+        #         pareto_front[k, :] = np.sum(self.items[pareto_indices[k, :], :], axis=0)
+            
+        #     self.distribution_table.append(self.distribution.copy())
+        #     self.pareto_indices_table.append(pareto_indices.copy())
+        #     self.pareto_front_table.append(pareto_front.copy())
+        #     self.js_div_list.append(js_div)
+        # print()
+
+        # Run generations (until convergence)
+        no_improve_gen = 0
+        prev_js_div = None
+        generation = 0
+        while no_improve_gen < self.max_no_improve_gen:
+            generation += 1
+            print(f"Generation {generation} (no improve count: {no_improve_gen})")
             self.distribution, self.selected_population, self.selected_objectives, \
                 pareto_indices, js_div = self._update_distribution()
-            
+
             pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
             for k in range(pareto_indices.shape[0]):
                 pareto_front[k, :] = np.sum(self.items[pareto_indices[k, :], :], axis=0)
-            
+                
             self.distribution_table.append(self.distribution.copy())
             self.pareto_indices_table.append(pareto_indices.copy())
             self.pareto_front_table.append(pareto_front.copy())
             self.js_div_list.append(js_div)
-        print()
-        
+                
+            if prev_js_div is not None:
+                diff = prev_js_div - js_div
+                if np.abs(diff) > 0.0001:
+                    no_improve_gen = 0
+                else:
+                    no_improve_gen += 1
+            else:
+                no_improve_gen = 0
+            prev_js_div = js_div
+
         return {
             'distribution_table': self.distribution_table,
             'pareto_indices_table': self.pareto_indices_table,
@@ -304,8 +334,8 @@ def generate_example_data(r, shape, scale, n_items=100, seed=1124):
 
 def main():
     # Set parameters
-    n_items = 100
-    n_selected = 10
+    n_items = 20
+    n_selected = 5
     n_obj = 3
     n_con = 1
     shape = [3.0, 4.0, 2.0, 8.0]
@@ -318,7 +348,8 @@ def main():
     ])
     capacity = int(shape[-1]*scale[-1]*n_selected)
     pop_size = 1000
-    generations = 100
+    generations = 100 # do not matter if check convergence
+    max_no_improve_gen = 20
     
     # Generate data
     items = generate_example_data(r, shape, scale, n_items=n_items)
@@ -331,6 +362,7 @@ def main():
         n_obj=n_obj,
         pop_size=pop_size,
         generations=generations,
+        max_no_improve_gen=max_no_improve_gen,
         seed=1123
     )
     
@@ -351,7 +383,7 @@ def main():
         dist_df = pd.DataFrame(np.vstack(distribution_table))
         dist_df.index.name = 'generation'
         dist_df.columns = [f"item_{i}" for i in range(dist_df.shape[1])]
-        dist_df.to_csv(os.path.join(output_dir, f"distribution_table_{n_items}_{n_selected}_{generations}.csv"))
+        dist_df.to_csv(os.path.join(output_dir, f"distribution_table_{n_items}_{n_selected}.csv"))
 
     js_div_list = results['js_div_list']
     if len(js_div_list) > 0:
@@ -359,24 +391,24 @@ def main():
             'generation': np.arange(1, len(js_div_list) + 1, dtype=int),
             'js_divergence': js_div_list
         })
-        js_df.to_csv(os.path.join(output_dir, f"js_div_list_{n_items}_{n_selected}_{generations}.csv"), index=False)
+        js_df.to_csv(os.path.join(output_dir, f"js_div_list_{n_items}_{n_selected}.csv"), index=False)
 
     pareto_indices_table = results['pareto_indices_table']
     pareto_front_table = results['pareto_front_table']
     if len(pareto_indices_table) > 0:
         np.savez_compressed(
-            os.path.join(output_dir, f"pareto_indices_table_{n_items}_{n_selected}_{generations}.npz"),
+            os.path.join(output_dir, f"pareto_indices_table_{n_items}_{n_selected}.npz"),
             **{f"gen_{i+1}": arr for i, arr in enumerate(pareto_indices_table)}
         )
     if len(pareto_front_table) > 0:
         np.savez_compressed(
-            os.path.join(output_dir, f"pareto_front_table_{n_items}_{n_selected}_{generations}.npz"),
+            os.path.join(output_dir, f"pareto_front_table_{n_items}_{n_selected}.npz"),
             **{f"gen_{i+1}": arr for i, arr in enumerate(pareto_front_table)}
         )
 
     # Plot convergence
     plt.figure(figsize=(10, 6))
-    plt.plot(np.arange(1, generations + 1, 1), results['js_div_list'])
+    plt.plot(np.arange(1, len(js_div_list) + 1, 1), js_div_list)
     plt.xlabel('Generations')
     plt.ylabel('Jensen-Shannon Divergence')
     plt.yscale('log')
