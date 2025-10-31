@@ -1,4 +1,5 @@
 import numpy as np
+import os
 from multitools import gamma_GC, make_pos_def
 from matplotlib import pyplot as plt
 import seaborn as sns
@@ -261,6 +262,7 @@ class KnapsackEDA:
         
         # Run generations
         for g in range(self.generations):
+            print(f"Generation {g+1}/{self.generations}", end='\r', flush=True)
             self.distribution, self.selected_population, self.selected_objectives, \
                 pareto_indices, js_div = self._update_distribution()
             
@@ -272,6 +274,7 @@ class KnapsackEDA:
             self.pareto_indices_table.append(pareto_indices.copy())
             self.pareto_front_table.append(pareto_front.copy())
             self.js_div_list.append(js_div)
+        print()
         
         return {
             'distribution_table': self.distribution_table,
@@ -301,8 +304,8 @@ def generate_example_data(r, shape, scale, n_items=100, seed=1124):
 
 def main():
     # Set parameters
-    n_items = 20
-    n_selected = 5
+    n_items = 100
+    n_selected = 10
     n_obj = 3
     n_con = 1
     shape = [3.0, 4.0, 2.0, 8.0]
@@ -315,7 +318,7 @@ def main():
     ])
     capacity = int(shape[-1]*scale[-1]*n_selected)
     pop_size = 1000
-    generations = 10
+    generations = 100
     
     # Generate data
     items = generate_example_data(r, shape, scale, n_items=n_items)
@@ -339,6 +342,38 @@ def main():
     print(f"Final Pareto front: {np.unique(results['pareto_front_table'][-1], axis=0)}")
     print(f"Final JS divergence: {results['js_div_list'][-1]:.6f}")
     
+    # Save results
+    output_dir = "/home/tailai/research/multiobjective/eda_results"
+    os.makedirs(output_dir, exist_ok=True)
+
+    distribution_table = results['distribution_table']
+    if len(distribution_table) > 0:
+        dist_df = pd.DataFrame(np.vstack(distribution_table))
+        dist_df.index.name = 'generation'
+        dist_df.columns = [f"item_{i}" for i in range(dist_df.shape[1])]
+        dist_df.to_csv(os.path.join(output_dir, f"distribution_table_{n_items}_{n_selected}_{generations}.csv"))
+
+    js_div_list = results['js_div_list']
+    if len(js_div_list) > 0:
+        js_df = pd.DataFrame({
+            'generation': np.arange(1, len(js_div_list) + 1, dtype=int),
+            'js_divergence': js_div_list
+        })
+        js_df.to_csv(os.path.join(output_dir, f"js_div_list_{n_items}_{n_selected}_{generations}.csv"), index=False)
+
+    pareto_indices_table = results['pareto_indices_table']
+    pareto_front_table = results['pareto_front_table']
+    if len(pareto_indices_table) > 0:
+        np.savez_compressed(
+            os.path.join(output_dir, f"pareto_indices_table_{n_items}_{n_selected}_{generations}.npz"),
+            **{f"gen_{i+1}": arr for i, arr in enumerate(pareto_indices_table)}
+        )
+    if len(pareto_front_table) > 0:
+        np.savez_compressed(
+            os.path.join(output_dir, f"pareto_front_table_{n_items}_{n_selected}_{generations}.npz"),
+            **{f"gen_{i+1}": arr for i, arr in enumerate(pareto_front_table)}
+        )
+
     # Plot convergence
     plt.figure(figsize=(10, 6))
     plt.plot(np.arange(1, generations + 1, 1), results['js_div_list'])
