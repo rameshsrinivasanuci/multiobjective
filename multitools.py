@@ -23,10 +23,13 @@ def make_pos_def(corr):
     d = np.sqrt(np.diag(corr_pd))
     corr_pd = corr_pd / d[:, None] / d[None, :]
     return corr_pd
-def gamma_GC(R, n, shape,scale):
+def gamma_GC(R, n, shape,scale,rng=None):
     R = make_pos_def(R)
     mean = np.zeros(np.shape(R)[0])
-    z = np.random.multivariate_normal(mean, R, size=n)
+    if rng is None:
+        z = np.random.multivariate_normal(mean, R, size=n)
+    else:
+        z = rng.multivariate_normal(mean, R, size=n)
     u = stats.norm.cdf(z)
     data = np.zeros_like(u)
     for i in range(u.shape[1]):
