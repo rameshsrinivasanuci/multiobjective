@@ -331,6 +331,15 @@ def generate_example_data(r, shape, scale, n_items=100, seed=1124):
     
     return items
 
+def organize_results(results):
+    js_div_list = results['js_div_list']
+    distribution_table = results['distribution_table']
+    pareto_indices_table = []
+    pareto_front_table = []
+    for j in range(len(results['pareto_front_table'])):
+        pareto_indices_table.append(np.unique(np.sort(results['pareto_indices_table'][j],axis = 1),axis =0))
+        pareto_front_table.append(np.unique(results['pareto_front_table'][j], axis=0))
+    return js_div_list, distribution_table, pareto_indices_table, pareto_front_table
 
 def main():
     # Set parameters
@@ -367,7 +376,7 @@ def main():
     )
     
     results = eda.run()
-    
+
     # Print results
     print(f"Number of unique items: {items.shape[0]}")
     print(f"Final Pareto front size: {np.unique(results['pareto_front_table'][-1], axis=0).shape[0]}")
