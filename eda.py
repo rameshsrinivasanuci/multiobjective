@@ -358,23 +358,18 @@ def organize_results(results):
     return js_div_list, distribution_table, pareto_indices_table, pareto_front_table
 
 def converged_pf_from_dist(
-    distribution, items, capacity, n_selected, eda_seed, n_obj, 
-    sample_size=1000, max_iters=100, max_no_change=5):
+    distribution, items, pareto_solutions, capacity, n_selected, n_obj,f_seed = 1234, 
+    sample_size=1000, max_iters=100, max_no_change=2):
 
-    rng = np.random.default_rng(eda_seed)       
+    rng = np.random.default_rng(f_seed)       
  
-    sample_init = sample_population(items, distribution, sample_size, n_selected, capacity, rng)
-    all_solutions = np.unique(np.sort(sample_init, axis=1), axis=0)
-    all_objectives = get_objectives(items, all_solutions, n_obj)
-    nd_idx = non_dominated(all_objectives)
-    pareto_solutions = all_solutions[nd_idx]
-    pareto_objectives = all_objectives[nd_idx]
-
+    pareto_solutions = np.unique(np.sort(pareto_solutions, axis=1), axis=0)
+    pareto_objectives = get_objectives(items, pareto_solutions, n_obj)
     no_change = 0
     counter = 0
     while no_change < max_no_change and counter < max_iters:
         new_sample = sample_population(items, distribution, sample_size, n_selected, capacity, rng)
-        all_solutions = np.unique(np.sort(np.vstack((all_solutions, new_sample)), axis=1), axis=0)
+        all_solutions = np.unique(np.sort(np.vstack((pareto_solutions, new_sample)), axis=1), axis=0)
         all_objectives = get_objectives(items, all_solutions, n_obj)
         nd_idx = non_dominated(all_objectives)
         new_pareto_solutions = all_solutions[nd_idx]
@@ -388,9 +383,6 @@ def converged_pf_from_dist(
         pareto_solutions, pareto_objectives = new_pareto_solutions, new_pareto_objectives
         counter += 1
         print(f"iter {counter}: {len(pareto_solutions)}")
-        print(f"no change: {no_change}")
-        print(f"number of solutions: {len(all_solutions)}")
-        print()
     
     return pareto_solutions, pareto_objectives, counter
 
