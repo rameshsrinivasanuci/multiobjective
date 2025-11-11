@@ -361,9 +361,9 @@ def converged_pf_from_dist(
     distribution, items, capacity, n_selected, eda_seed, n_obj, 
     sample_size=1000, max_iters=100, max_no_change=5):
 
-    rng = random.default_rng(eda_seed)       
+    rng = np.random.default_rng(eda_seed)       
  
-    sample_init = sample_population(items, final_dist, sample_size, n_selected, capacity, rng)
+    sample_init = sample_population(items, distribution, sample_size, n_selected, capacity, rng)
     all_solutions = np.unique(np.sort(sample_init, axis=1), axis=0)
     all_objectives = get_objectives(items, all_solutions, n_obj)
     nd_idx = non_dominated(all_objectives)
@@ -373,7 +373,7 @@ def converged_pf_from_dist(
     no_change = 0
     counter = 0
     while no_change < max_no_change and counter < max_iters:
-        new_sample = sample_population(items, final_dist, sample_size, n_selected, capacity, rng)
+        new_sample = sample_population(items, distribution, sample_size, n_selected, capacity, rng)
         all_solutions = np.unique(np.sort(np.vstack((all_solutions, new_sample)), axis=1), axis=0)
         all_objectives = get_objectives(items, all_solutions, n_obj)
         nd_idx = non_dominated(all_objectives)
