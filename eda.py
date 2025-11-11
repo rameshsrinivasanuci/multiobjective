@@ -72,6 +72,22 @@ def non_dominated_sort(objectives):
     return dominated_sets, domination_counts, ranks, fronts
 
 
+def non_dominated(objectives):
+    n_solutions = objectives.shape[0]
+    non_dominated = np.ones(n_solutions, dtype=bool)
+    for i in range(n_solutions):
+        for j in range(n_solutions):
+            if i == j:
+                continue
+
+            if np.all(objectives[j, :] >= objectives[i, :]) and \
+                np.any(objectives[j, :] > objectives[i, :]):
+                non_dominated[i] = False
+                break
+
+    return non_dominated
+
+
 def assign_crowding_distance(objectives):
     """Assign crowding distance to solutions."""
     distances = np.zeros(objectives.shape[0], dtype=float)
@@ -340,6 +356,43 @@ def organize_results(results):
         pareto_indices_table.append(np.unique(np.sort(results['pareto_indices_table'][j],axis = 1),axis =0))
         pareto_front_table.append(np.unique(results['pareto_front_table'][j], axis=0))
     return js_div_list, distribution_table, pareto_indices_table, pareto_front_table
+
+def converged_pf_from_dist(
+    distribution, items, capacity, n_selected, eda_seed, n_obj, 
+    sample_size=1000, max_iters=100, max_no_change=5):
+
+    rng = random.default_rng(eda_seed)       
+ 
+    sample_init = sample_population(items, final_dist, sample_size, n_selected, capacity, rng)
+    all_solutions = np.unique(np.sort(sample_init, axis=1), axis=0)
+    all_objectives = get_objectives(items, all_solutions, n_obj)
+    nd_idx = non_dominated(all_objectives)
+    pareto_solutions = all_solutions[nd_idx]
+    pareto_objectives = all_objectives[nd_idx]
+
+    no_change = 0
+    counter = 0
+    while no_change < max_no_change and counter < max_iters:
+        new_sample = sample_population(items, final_dist, sample_size, n_selected, capacity, rng)
+        all_solutions = np.unique(np.sort(np.vstack((all_solutions, new_sample)), axis=1), axis=0)
+        all_objectives = get_objectives(items, all_solutions, n_obj)
+        nd_idx = non_dominated(all_objectives)
+        new_pareto_solutions = all_solutions[nd_idx]
+        new_pareto_objectives = all_objectives[nd_idx]
+        
+        if np.array_equal(np.unique(new_pareto_objectives, axis=0), np.unique(pareto_objectives, axis=0)):
+            no_change += 1
+        else:
+            no_change = 0
+
+        pareto_solutions, pareto_objectives = new_pareto_solutions, new_pareto_objectives
+        counter += 1
+        print(f"iter {counter}: {len(pareto_solutions)}")
+        print(f"no change: {no_change}")
+        print(f"number of solutions: {len(all_solutions)}")
+        print()
+    
+    return pareto_solutions, pareto_objectives, counter
 
 def main():
     # Set parameters
