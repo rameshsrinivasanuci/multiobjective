@@ -7,7 +7,8 @@ import pandas as pd
 from itertools import islice, combinations
 from numpy import random
 from scipy.spatial.distance import jensenshannon
-
+from numba import jit
+from numba.typed import List
 
 def get_objectives(samples, indices, nobj):
     """Calculate objectives for given solution indices."""
@@ -25,51 +26,107 @@ def get_constraints(samples, indices, nobj, ncon):
     constraints = np.squeeze(constraints)
     return constraints
 
+# old non dominated sort algorithm
+# def non_dominated_sort(objectives):
+#     """Perform non-dominated sorting on objectives."""
+#     n_solutions = objectives.shape[0]
+#     dominated_sets = [[] for _ in range(n_solutions)]  # the set of solutions that p dominates
+#     domination_counts = [0] * n_solutions  # the number of solutions that dominate p
+#     ranks = np.full(n_solutions, -1, dtype=int)
+#     fronts = [[]]
 
+#     for p in range(n_solutions):
+#         for q in range(n_solutions):
+#             if p == q:
+#                 continue
+
+#             if np.all(objectives[p, :] >= objectives[q, :]) and \
+#                     np.any(objectives[p, :] > objectives[q, :]):
+#                 dominated_sets[p].append(q)
+#             elif np.all(objectives[q, :] >= objectives[p, :]) and \
+#                     np.any(objectives[q, :] > objectives[p, :]):
+#                 domination_counts[p] += 1
+
+#         if domination_counts[p] == 0:
+#             ranks[p] = 0
+#             fronts[0].append(p)
+
+#     i = 0
+#     while i < len(fronts) and len(fronts[i]) > 0:
+#         next_front = []
+#         for p in fronts[i]:
+#             for q in dominated_sets[p]:
+#                 domination_counts[q] -= 1
+#                 if domination_counts[q] == 0:
+#                     ranks[q] = i + 1
+#                     next_front.append(q)
+
+#         if next_front:
+#             fronts.append(next_front)
+#         i += 1
+
+#     dominated_sets = np.array([np.array(s, dtype=int) for s in dominated_sets], dtype=object) # issue here
+#     domination_counts = np.array(domination_counts, dtype=int)
+#     ranks = np.array(ranks, dtype=int)
+#     fronts = np.array([np.array(f, dtype=int) for f in fronts if len(f) > 0], dtype=object) # issue here
+
+#     return dominated_sets, domination_counts, ranks, fronts
+
+
+# new non dominated sort algorithm compatible with numba
+@jit(nopython=True)
 def non_dominated_sort(objectives):
-    """Perform non-dominated sorting on objectives."""
+    """
+    Numba-compatible version of non_dominated_sort
+    """
     n_solutions = objectives.shape[0]
-    dominated_sets = [[] for _ in range(n_solutions)]  # the set of solutions that p dominates
-    domination_counts = [0] * n_solutions  # the number of solutions that dominate p
-    ranks = np.full(n_solutions, -1, dtype=int)
-    fronts = [[]]
-
+    max_dominated = n_solutions - 1
+    dominated_matrix = np.full((n_solutions, max_dominated), -1, dtype=np.int32) # solutions dominated by p
+    dominated_counts = np.zeros(n_solutions, dtype=np.int32) # number of solutions p dominates
+    domination_counts = np.zeros(n_solutions, dtype=np.int32) # number of solutions that dominate p
+    ranks = np.full(n_solutions, -1, dtype=np.int32)
+    
     for p in range(n_solutions):
         for q in range(n_solutions):
             if p == q:
                 continue
-
             if np.all(objectives[p, :] >= objectives[q, :]) and \
-                    np.any(objectives[p, :] > objectives[q, :]):
-                dominated_sets[p].append(q)
+                np.any(objectives[p, :] > objectives[q, :]):
+                idx = int(dominated_counts[p])
+                dominated_matrix[p, idx] = q
+                dominated_counts[p] += 1
             elif np.all(objectives[q, :] >= objectives[p, :]) and \
-                    np.any(objectives[q, :] > objectives[p, :]):
+                np.any(objectives[q, :] > objectives[p, :]):
                 domination_counts[p] += 1
-
+        
         if domination_counts[p] == 0:
             ranks[p] = 0
-            fronts[0].append(p)
+    
+    fronts_list = list()
+    first_front = []
+    for p in range(n_solutions):
+        if ranks[p] == 0:
+            first_front.append(p)
+    if len(first_front) > 0:
+        first_front_arr = np.array(first_front, dtype=np.int32)
+        fronts_list.append(first_front_arr)
 
     i = 0
-    while i < len(fronts) and len(fronts[i]) > 0:
+    while i < len(fronts_list) and len(fronts_list[i]) > 0:
         next_front = []
-        for p in fronts[i]:
-            for q in dominated_sets[p]:
+        for p in fronts_list[i]:
+            for j in range(dominated_counts[p]):
+                q = dominated_matrix[p, j]     
                 domination_counts[q] -= 1
                 if domination_counts[q] == 0:
                     ranks[q] = i + 1
                     next_front.append(q)
-
-        if next_front:
-            fronts.append(next_front)
+        if len(next_front) > 0:
+            next_front_arr = np.array(next_front, dtype=np.int32)
+            fronts_list.append(next_front_arr)
         i += 1
-
-    dominated_sets = np.array([np.array(s, dtype=int) for s in dominated_sets], dtype=object)
-    domination_counts = np.array(domination_counts, dtype=int)
-    ranks = np.array(ranks, dtype=int)
-    fronts = np.array([np.array(f, dtype=int) for f in fronts if len(f) > 0], dtype=object)
-
-    return dominated_sets, domination_counts, ranks, fronts
+    
+    return ranks, fronts_list
 
 
 def non_dominated(objectives):
@@ -197,7 +254,8 @@ class KnapsackEDA:
         )
         objectives = get_objectives(self.items, population, self.n_obj)
         
-        _, _, ranks, fronts = non_dominated_sort(objectives)
+        # _, _, ranks, fronts = non_dominated_sort(objectives)
+        ranks, fronts = non_dominated_sort(objectives)
         distances_all_solutions = np.zeros(population.shape[0], dtype=float)
         for f in fronts:
             distances = assign_crowding_distance(objectives[f, :])
@@ -228,13 +286,15 @@ class KnapsackEDA:
         objectives = get_objectives(self.items, population, self.n_obj)
         
         # Find current pareto front
-        _, _, _, fronts_current = non_dominated_sort(objectives)
+        # _, _, _, fronts_current = non_dominated_sort(objectives)
+        _, fronts_current = non_dominated_sort(objectives)
         pareto_indices = population[fronts_current[0]]
         
         objectives = np.vstack((self.selected_objectives, objectives))
         population = np.vstack((self.selected_population, population))
         
-        _, _, ranks, fronts = non_dominated_sort(objectives)
+        # _, _, ranks, fronts = non_dominated_sort(objectives)
+        ranks, fronts = non_dominated_sort(objectives)
         select_indices = np.array([], dtype=int)
         for f in fronts:
             if len(select_indices) + len(f) <= self.pop_size:
@@ -339,13 +399,43 @@ def cleanupsamples(samples, nobj, precision=1):
         newsamples = np.array(newsamples, dtype='int8')
     return newsamples
 
+# def generate_example_data(r, shape, scale, n_items=100, seed=1124):
+#     r = make_pos_def(r)
+#     item_rng = random.default_rng(seed=seed)
+#     items = gamma_GC(r, n_items, shape, scale, rng=item_rng)
+#     items = cleanupsamples(items, nobj=3, precision=0)
+    
+#     return items
+
+# biased sampling?
+# def generate_example_data(r, shape, scale, n_items=100, seed=1124):
+#     r = make_pos_def(r)
+#     item_rng = random.default_rng(seed=seed)
+#     items = gamma_GC(r, n_items*2, shape, scale, rng=item_rng)
+#     items = cleanupsamples(items, nobj=3, precision=0)
+#     selected_idx = item_rng.choice(items.shape[0], size=n_items, replace=False)
+#     items = np.unique(items[selected_idx], axis=0) # make sure to obtain n_items unique items
+#     print(f"Number of items: {items.shape[0]}")
+#     return items
+
 def generate_example_data(r, shape, scale, n_items=100, seed=1124):
     r = make_pos_def(r)
     item_rng = random.default_rng(seed=seed)
-    items = gamma_GC(r, n_items, shape, scale, rng=item_rng)
-    items = cleanupsamples(items, nobj=3, precision=0)
     
-    return items
+    batch = max(5, n_items // 10)
+    uniq = set()
+    items = []
+    while len(items) < n_items:
+        new = gamma_GC(r, batch, shape, scale, rng=item_rng)
+        new = cleanupsamples(new, nobj=3, precision=0)
+        for item in new:
+            key = tuple(item)
+            if key not in uniq:
+                uniq.add(key)
+                items.append(item)
+                if len(items) == n_items:
+                    break
+    return np.unique(np.array(items), axis=0) # here np.unique is used for sorting
 
 def organize_results(results):
     js_div_list = results['js_div_list']
