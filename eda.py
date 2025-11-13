@@ -180,7 +180,7 @@ def binary_tournament_selection(population, ranks, distances, rng):
 def sample_population(samples, distribution, pop_size, n_selected, capacity, rng):
     """Sample population from distribution respecting capacity constraint."""
     pop_count = 0
-    population = np.zeros((pop_size, n_selected), dtype='int8')
+    population = np.zeros((pop_size, n_selected), dtype='int32')
     n_items = distribution.size
 
     while pop_count < pop_size:
@@ -396,7 +396,7 @@ def cleanupsamples(samples, nobj, precision=1):
     c, i = np.unique(samples[:, :nobj], axis=0, return_index=True)
     newsamples = samples[i, :]  # note - these have been sorted into increasing magnitude
     if precision == 0:
-        newsamples = np.array(newsamples, dtype='int8')
+        newsamples = np.array(newsamples, dtype='int32')
     return newsamples
 
 # def generate_example_data(r, shape, scale, n_items=100, seed=1124):
