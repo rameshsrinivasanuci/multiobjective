@@ -12,17 +12,17 @@ from numba.typed import List
 
 def get_objectives(samples, indices, nobj):
     """Calculate objectives for given solution indices."""
-    objectives = np.zeros((indices.shape[0], nobj), dtype='int16')
+    objectives = np.zeros((indices.shape[0], nobj), dtype='int32')
     for j in range(indices.shape[0]):
-        objectives[j, :] = np.sum(samples[indices[j], :nobj], axis=0, dtype='int16')
+        objectives[j, :] = np.sum(samples[indices[j], :nobj], axis=0, dtype=np.int32)
     return objectives
 
 
 def get_constraints(samples, indices, nobj, ncon):
     """Calculate constraints for given solution indices."""
-    constraints = np.zeros((indices.shape[0], ncon), dtype='int16')
+    constraints = np.zeros((indices.shape[0], ncon), dtype='int32')
     for j in range(indices.shape[0]):
-        constraints[j, :] = np.sum(samples[indices[j], nobj:], axis=0, dtype='int16')
+        constraints[j, :] = np.sum(samples[indices[j], nobj:], axis=0, dtype=np.int32)
     constraints = np.squeeze(constraints)
     return constraints
 
@@ -128,10 +128,10 @@ def non_dominated_sort(objectives):
     
     return ranks, fronts_list
 
-
+@jit(nopython=True)
 def non_dominated(objectives):
     n_solutions = objectives.shape[0]
-    non_dominated = np.ones(n_solutions, dtype=bool)
+    non_dominated = np.ones(n_solutions)
     for i in range(n_solutions):
         for j in range(n_solutions):
             if i == j:
@@ -139,7 +139,7 @@ def non_dominated(objectives):
 
             if np.all(objectives[j, :] >= objectives[i, :]) and \
                 np.any(objectives[j, :] > objectives[i, :]):
-                non_dominated[i] = False
+                non_dominated[i] = 0
                 break
 
     return non_dominated
@@ -180,7 +180,7 @@ def binary_tournament_selection(population, ranks, distances, rng):
 def sample_population(samples, distribution, pop_size, n_selected, capacity, rng):
     """Sample population from distribution respecting capacity constraint."""
     pop_count = 0
-    population = np.zeros((pop_size, n_selected), dtype='int32')
+    population = np.zeros((pop_size, n_selected), dtype=np.int32)
     n_items = distribution.size
 
     while pop_count < pop_size:
@@ -295,7 +295,7 @@ class KnapsackEDA:
         
         # _, _, ranks, fronts = non_dominated_sort(objectives)
         ranks, fronts = non_dominated_sort(objectives)
-        select_indices = np.array([], dtype=int)
+        select_indices = np.array([], dtype=np.int32)
         for f in fronts:
             if len(select_indices) + len(f) <= self.pop_size:
                 select_indices = np.concatenate([select_indices, f])
@@ -396,7 +396,7 @@ def cleanupsamples(samples, nobj, precision=1):
     c, i = np.unique(samples[:, :nobj], axis=0, return_index=True)
     newsamples = samples[i, :]  # note - these have been sorted into increasing magnitude
     if precision == 0:
-        newsamples = np.array(newsamples, dtype='int32')
+        newsamples = np.array(newsamples, dtype=np.int32)
     return newsamples
 
 # def generate_example_data(r, shape, scale, n_items=100, seed=1124):
@@ -462,6 +462,7 @@ def converged_pf_from_dist(
         all_solutions = np.unique(np.sort(np.vstack((pareto_solutions, new_sample)), axis=1), axis=0)
         all_objectives = get_objectives(items, all_solutions, n_obj)
         nd_idx = non_dominated(all_objectives)
+        nd_idx = nd_idx.astype(bool)
         new_pareto_solutions = all_solutions[nd_idx]
         new_pareto_objectives = all_objectives[nd_idx]
         
@@ -532,7 +533,7 @@ def main():
     js_div_list = results['js_div_list']
     if len(js_div_list) > 0:
         js_df = pd.DataFrame({
-            'generation': np.arange(1, len(js_div_list) + 1, dtype=int),
+            'generation': np.arange(1, len(js_div_list) + 1, dtype=np.int32),
             'js_divergence': js_div_list
         })
         js_df.to_csv(os.path.join(output_dir, f"js_div_list_{n_items}_{n_selected}.csv"), index=False)
