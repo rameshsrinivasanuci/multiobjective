@@ -418,7 +418,7 @@ def cleanupsamples(samples, nobj, precision=1):
 #     print(f"Number of items: {items.shape[0]}")
 #     return items
 
-def generate_example_data(r, shape, scale, n_items=100, seed=1124):
+def generate_example_data(r, shape, scale, n_items=100, seed=1124, precision = 0):
     r = make_pos_def(r)
     item_rng = random.default_rng(seed=seed)
     
@@ -427,7 +427,7 @@ def generate_example_data(r, shape, scale, n_items=100, seed=1124):
     items = []
     while len(items) < n_items:
         new = gamma_GC(r, batch, shape, scale, rng=item_rng)
-        new = cleanupsamples(new, nobj=3, precision=0)
+        new = cleanupsamples(new, nobj=3, precision=precision)
         for item in new:
             key = tuple(item)
             if key not in uniq:
@@ -435,7 +435,7 @@ def generate_example_data(r, shape, scale, n_items=100, seed=1124):
                 items.append(item)
                 if len(items) == n_items:
                     break
-    return np.unique(np.array(items), axis=0) # here np.unique is used for sorting
+    return np.unique(np.array(items), axis=0), r # here np.unique is used for sorting
 
 def organize_results(results):
     js_div_list = results['js_div_list']
