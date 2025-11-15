@@ -7,7 +7,7 @@ import pandas as pd
 from itertools import islice, combinations
 from numpy import random
 from scipy.spatial.distance import jensenshannon
-from numba import jit
+from numba import jit, prange, njit
 from numba.typed import List
 
 def get_objectives(samples, indices, nobj):
@@ -132,8 +132,8 @@ def non_dominated_sort(objectives):
 def non_dominated(objectives):
     n_solutions = objectives.shape[0]
     non_dominated = np.ones(n_solutions)
-    for i in range(n_solutions):
-        for j in range(n_solutions):
+    for i in prange(n_solutions):
+        for j in prange(n_solutions):
             if i == j:
                 continue
 
@@ -359,7 +359,7 @@ class KnapsackEDA:
         generation = 0
         while no_improve_gen < self.max_no_improve_gen:
             generation += 1
-            print(f"Generation {generation} (no improve count: {no_improve_gen})")
+            #print(f"Generation {generation} (no improve count: {no_improve_gen})")
             self.distribution, self.selected_population, self.selected_objectives, \
                 pareto_indices, js_div = self._update_distribution()
 
@@ -473,7 +473,7 @@ def converged_pf_from_dist(
 
         pareto_solutions, pareto_objectives = new_pareto_solutions, new_pareto_objectives
         counter += 1
-        print(f"iter {counter}: {len(pareto_solutions)}")
+        #print(f"iter {counter}: {len(pareto_solutions)}")
     
     return pareto_solutions, pareto_objectives, counter
 
