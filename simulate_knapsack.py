@@ -33,6 +33,8 @@ def knapsack_run(n_items,n_selected,n_obj,n_con,shape,scale,r,type = 'sim',n_run
     allsim['items']= list()
     allsim['pareto_indices_final'] = list()
     allsim['pareto_front_final'] = list()
+    allsim['js_div_list'] = list()
+    allsim['distribution_table'] = list()
     allsim['rpos'] = list()
     for run in range(n_run): #save to file
         #save to file
@@ -86,49 +88,57 @@ def knapsack_run(n_items,n_selected,n_obj,n_con,shape,scale,r,type = 'sim',n_run
         pareto_constraints = get_constraints(items, pareto_solutions, n_obj,n_con)
         pareto_front_final = np.concatenate((pareto_objectives, pareto_constraints.reshape(-1,1)), axis =1 )
         #save to file
+        allsim['distribution_table'].append(distribution_table[-1])
+        allsim['js_div_list'].append(js_div_list[-1])
         allsim['pareto_indices_final'].append(pareto_solutions)
         allsim['pareto_front_final'].append(pareto_front_final)
-        return allsim    
+    return allsim    
 
 #%%
 
 #parameters
-type = 'pospair'
+type = 'allneg'
 n_run = 200
-n_items = 120
-n_selected = 6
+#n_items = [40 80 120 160]
+#n_selected = [4 8 12 16]
 n_obj = 3
 n_con = 1
 shape = [3.0, 4.0, 2.0, 8.0]
 scale = [2.0, 3, 2, 1.0]
 
-capacity = int(shape[-1]*scale[-1]*n_selected)
+
 pop_size = 1000
 generations = 100 # do not matter if check convergence
 max_no_improve_gen = 10
-ct = 0
-for r_obj in np.arange(0.1,0.9,0.1):
-    for r_con in np.arange(0.1,0.9,0.1):
-        ct += 1
-        print(f"file = {ct}")
-        r = np.array([      
-            [1.0, -r_obj, -r_obj, r_con],
-            [-r_obj, 1.0, r_obj, r_con],
-            [-r_obj, r_obj, 1.0, r_con],
-            [r_con, r_con, r_con, 1.0],
-        ])
 
-        allsim = knapsack_run(n_items,n_selected,n_obj,n_con,shape,scale,r,type = type,n_run=n_run,pop_size =pop_size, generations=generations, max_no_improve_gen=max_no_improve_gen)
+for n_items in [30, 60, 120]: #[60, 120]:
+    for n_selected in [6]: #[6,12]:
+        capacity = int(shape[-1]*scale[-1]*n_selected)
+        ct = 0
+        for r_obj in np.arange(0.1,0.9,0.1):
+            for r_con in np.arange(0.1,0.9,0.1):
+                ct += 1
+                print(f"file = {ct}")
+                r = np.array([      
+                    [1.0, -r_obj, -r_obj, r_con],
+                    [-r_obj, 1.0, -r_obj, r_con],
+                    [-r_obj, -r_obj, 1.0, r_con],
+                    [r_con, r_con, r_con, 1.0],
+                ])
 
-        if not os.path.exists('./results/'):
-            os.makedirs('./results/')
-        output_dir = './results/'
-        savemat(os.path.join(output_dir, f"knapsack_eda_sim_{type}_{n_items}_{n_selected}_{ct}_all.mat"), allsim, store_python_metadata=True)
 
-        file_path = os.path.join(output_dir, f"knapsack_eda_sim_{type}_{n_items}_{n_selected}_{ct}_all.pkl")
+                allsim = knapsack_run(n_items,n_selected,n_obj,n_con,shape,scale,r,type = type,n_run=n_run,pop_size =pop_size, generations=generations, max_no_improve_gen=max_no_improve_gen)
+                allsim['r_obj'] = r_obj
+                allsim['r_con'] = r_con
+                #output_dir = f"./results/knapsack/{n_items}_{n_selected}/{type}"
+                output_dir = "./results/run2"
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+                savemat(os.path.join(output_dir, f"kn_{type}_{n_items}_{n_selected}_{ct}_all.mat"), allsim, store_python_metadata=True)
 
-        with open(file_path, "wb") as pickle_file: # "wb" for write binary
-            pickle.dump(allsim, pickle_file)
+                file_path = os.path.join(output_dir, f"kn_{type}_{n_items}_{n_selected}_{ct}_all.pkl")
+                with open(file_path, "wb") as pickle_file: # "wb" for write binary
+                    pickle.dump(allsim, pickle_file)
 
 # %%
 # output_dir = "./results"
