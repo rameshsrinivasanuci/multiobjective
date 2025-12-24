@@ -419,7 +419,7 @@ def cleanupsamples(samples, nobj, precision=1):
 #     return items
 
 def generate_example_data(r, shape, scale, n_items=100, seed=1124, precision = 0):
-    r = make_pos_def(r)
+    #r = make_pos_def(r)
     item_rng = random.default_rng(seed=seed)
     
     batch = max(5, n_items // 10)
