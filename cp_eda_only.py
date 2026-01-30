@@ -40,15 +40,24 @@ def fit_gamma_y_to_z(YY, XX_z):
             y_r = y + 1
 
             if np.ptp(y_r) < 1e-12:
-                raise RuntimeError(
-                    f"Gamma degenerate at t={t}, i={i}\n"
-                    f"unique(y_r)={np.unique(y_r)}\n"
-                    f"min={y_r.min()}, max={y_r.max()}\n"
-                    f"population size={YY.shape[0]}"
-                    f"XX_z= {XX_z[:,t,i]}"
-                )
+                # raise RuntimeError(
+                #     f"Gamma degenerate at t={t}, i={i}\n"
+                #     f"unique(y_r)={np.unique(y_r)}\n"
+                #     f"min={y_r.min()}, max={y_r.max()}\n"
+                #     f"population size={YY.shape[0]}"
+                #     f"XX_z= {XX_z[:,t,i]}"
+                # )
+                print(f"Gamma degenerate at t={t}, i={i}")
+                m = float(np.mean(y_r))
+                m = max(m, 1e-12)
+                std = 1e-5 * m
+                v = std * std
+                a = (m * m) / v          # shape
+                b = v / m                # scale
+                loc = 0.0
+            else:
+                a, loc, b = gamma.fit(y_r, floc=0.0)
 
-            a, loc, b = gamma.fit(y_r, floc=0.0)
             u = gamma.cdf(y_r, a=a, loc=loc, scale=b)
             u = np.clip(u, 1e-12, 1 - 1e-12)
             YY_z[:, t, i] = norm.ppf(u)
@@ -565,20 +574,20 @@ class KnapsackEDACond:
 
 
 def main():
-    kn = loadmat('/data/knapsack/runA/kn_2_3_allneg_120_12_4.mat')
+    kn = loadmat('/data/knapsack/runA/kn_2_3_allneg_120_12_3.mat')
     shape = kn['shape']
     scale = kn['scale']
     eda_seed = 1223
     n_items = 120
     n_selected = 12
-    n_obj = 4
+    n_obj = 3
     n_con = 1
     capacity = int(shape[-1]*scale[-1]*n_selected)
     pop_size = 5000
     generations = 100 
     max_no_improve_gen = 5
     max_iters = 100
-    for i in range(10):
+    for i in range(20):
         items = kn['items'][i]
 
         eda = KnapsackEDACond(
@@ -595,7 +604,7 @@ def main():
         )
 
         results = eda.run()
-        with open(f'final_2_3_120_12_obj4_run{i}.pkl', 'wb') as f:
+        with open(f'final_2_3_{n_items}_{n_selected}_obj{n_obj}_run{i}.pkl', 'wb') as f:
             pickle.dump(results, f)
 
     # from matplotlib import pyplot as plt
