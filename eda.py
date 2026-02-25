@@ -9,6 +9,8 @@ from numpy import random
 from scipy.spatial.distance import jensenshannon
 from numba import jit, prange, njit
 from numba.typed import List
+from hdf5storage import loadmat
+import pickle
 
 def get_objectives(samples, indices, nobj):
     """Calculate objectives for given solution indices."""
@@ -177,11 +179,24 @@ def binary_tournament_selection(population, ranks, distances, rng):
             return j
 
 
-def sample_population(samples, distribution, pop_size, n_selected, capacity, rng):
-    """Sample population from distribution respecting capacity constraint."""
+def row_diff(A, B):
+    A_set = set(map(tuple, A))
+    B_set = set(map(tuple, B))
+    return len(A_set.symmetric_difference(B_set))
+
+
+def sample_population(samples, distribution, pop_size, n_selected, capacity, rng, p_rank):
+    """
+        Sample population from distribution respecting capacity constraint.
+        Human input(weights) is used to bias the sampling.
+    """
     pop_count = 0
     population = np.zeros((pop_size, n_selected), dtype=np.int32)
     n_items = distribution.size
+
+    if p_rank is not None:
+        distribution = distribution * p_rank
+        distribution /= distribution.sum()
 
     while pop_count < pop_size:
         knapsack = rng.choice(n_items, n_selected, p=distribution, replace=False)
@@ -202,8 +217,10 @@ class KnapsackEDA:
     population, and objectives across generations.
     """
     
-    def __init__(self, items, capacity, n_selected, n_obj, pop_size=1000, 
-                 generations=100, max_no_improve_gen=20, seed=1123):
+    def __init__(self, items, capacity, 
+                 n_selected, n_obj, 
+                 pop_size=1000, generations=100, max_no_improve_gen=20, max_row_diff=5, seed=1123,
+                 p_rank=None):
         """
         Initialize EDA algorithm.
         
@@ -221,8 +238,14 @@ class KnapsackEDA:
             Population size
         generations : int
             Number of generations to run
+        max_no_improve_gen : int
+            Maximum number of generations without improvement
+        max_row_diff : int
+            Maximum number of row differences between consecutive Pareto fronts
         seed : int
             Random seed
+        p_rank : np.ndarray
+            Human input weights used to bias the sampling
         """
         self.items = items
         self.capacity = capacity
@@ -231,7 +254,9 @@ class KnapsackEDA:
         self.pop_size = pop_size
         self.generations = generations
         self.max_no_improve_gen = max_no_improve_gen
+        self.max_row_diff = max_row_diff
         self.rng = random.default_rng(seed=seed)
+        self.p_rank = p_rank
         
         # State variables (will be initialized during run)
         self.distribution = None
@@ -243,6 +268,7 @@ class KnapsackEDA:
         self.pareto_indices_table = []
         self.pareto_front_table = []
         self.js_div_list = []
+        self.converged_pf_table = []
     
     def _generate_initial_population(self):
         """Generate initial population based on tournament selection."""
@@ -250,7 +276,7 @@ class KnapsackEDA:
         distribution = np.ones(n_items) / n_items
         population = sample_population(
             self.items, distribution, self.pop_size, self.n_selected, 
-            self.capacity, self.rng
+            self.capacity, self.rng, self.p_rank
         )
         objectives = get_objectives(self.items, population, self.n_obj)
         
@@ -281,7 +307,7 @@ class KnapsackEDA:
         """Update distribution and select new population."""
         population = sample_population(
             self.items, self.distribution, self.pop_size, self.n_selected,
-            self.capacity, self.rng
+            self.capacity, self.rng, self.p_rank
         )
         objectives = get_objectives(self.items, population, self.n_obj)
         
@@ -320,6 +346,35 @@ class KnapsackEDA:
         js_div = jensenshannon(self.distribution, updated_distribution)**2
         
         return updated_distribution, selected_population, selected_objectives, pareto_indices, js_div
+
+    def _converged_pf(self):
+        """Find the converged Pareto Front using non-dominated, still updating distribution."""
+        population = sample_population(
+            self.items, self.distribution, self.pop_size, self.n_selected,
+            self.capacity, self.rng, self.p_rank
+        )
+        objectives = get_objectives(self.items, population, self.n_obj)
+
+        # find current pareto front
+        pareto_indices = population[non_dominated(objectives).astype(bool)]
+
+        population = np.unique(np.sort(np.vstack((self.selected_population, population)), axis=1), axis=0)
+        objectives = get_objectives(self.items, population, self.n_obj)
+
+        nd_idx = non_dominated(objectives).astype(bool)
+        selected_population = population[nd_idx]
+        selected_objectives = objectives[nd_idx]
+
+        n_items = self.items.shape[0]
+        updated_distribution = np.ones(n_items)
+        updated_distribution += np.bincount(selected_population.flatten(), minlength=n_items)
+        updated_distribution /= np.sum(updated_distribution)
+        
+        self.distribution[self.distribution < 1E-08] = 1E-08
+        updated_distribution[updated_distribution < 1E-08] = 1E-08
+        js_div = jensenshannon(self.distribution, updated_distribution)**2
+
+        return updated_distribution, selected_population, selected_objectives, pareto_indices, js_div
     
     def run(self):
         """
@@ -337,31 +392,16 @@ class KnapsackEDA:
         self.distribution, self.selected_population, self.selected_objectives = \
             self._generate_initial_population()
         
-        # Run generations (fixed number of generations)
-        # for g in range(self.generations):
-        #     print(f"Generation {g+1}/{self.generations}")
-        #     self.distribution, self.selected_population, self.selected_objectives, \
-        #         pareto_indices, js_div = self._update_distribution()
-            
-        #     pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
-        #     for k in range(pareto_indices.shape[0]):
-        #         pareto_front[k, :] = np.sum(self.items[pareto_indices[k, :], :], axis=0)
-            
-        #     self.distribution_table.append(self.distribution.copy())
-        #     self.pareto_indices_table.append(pareto_indices.copy())
-        #     self.pareto_front_table.append(pareto_front.copy())
-        #     self.js_div_list.append(js_div)
-        # print()
-
-        # Run generations (until convergence)
+        # Mode 1: run until distribution converges
         no_improve_gen = 0
         prev_js_div = None
         generation = 0
         while no_improve_gen < self.max_no_improve_gen:
             generation += 1
-            #print(f"Generation {generation} (no improve count: {no_improve_gen})")
+            # print(f"Mode 1 generation {generation} (no improve count: {no_improve_gen})")
             self.distribution, self.selected_population, self.selected_objectives, \
                 pareto_indices, js_div = self._update_distribution()
+            # print(f"number of front 0: {pareto_indices.shape[0]}")
 
             pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
             for k in range(pareto_indices.shape[0]):
@@ -382,71 +422,50 @@ class KnapsackEDA:
                 no_improve_gen = 0
             prev_js_div = js_div
 
+        # Mode 2: run until Pareto Front converges
+        no_improve_gen = 0
+        counter = 0 
+        prev_front_0 = None
+        while no_improve_gen < 1:
+            counter += 1
+            # print(f"Mode 2 generation {counter} (no improve count: {no_improve_gen})")
+            self.distribution, self.selected_population, self.selected_objectives, \
+                pareto_indices, js_div = self._converged_pf()
+            # print(f"number of front 0: {pareto_indices.shape[0]}")
+
+            pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
+            for k in range(pareto_indices.shape[0]):
+                pareto_front[k, :] = np.sum(self.items[pareto_indices[k, :], :], axis=0)
+            
+            self.distribution_table.append(self.distribution.copy())
+            self.pareto_indices_table.append(pareto_indices.copy())
+            self.pareto_front_table.append(pareto_front.copy())
+            self.js_div_list.append(js_div)
+
+            front_0 = np.unique(self.selected_objectives, axis=0)
+            front_0 = front_0[np.lexsort(front_0.T[::-1])]
+            if prev_front_0 is not None:
+                if row_diff(prev_front_0, front_0) <= self.max_row_diff:
+                    no_improve_gen += 1
+                else:
+                    no_improve_gen = 0
+            else:
+                no_improve_gen = 0
+            
+            self.converged_pf_table.append(front_0.copy())
+            prev_front_0 = front_0
+
         return {
-            'distribution_table': self.distribution_table,
             'pareto_indices_table': self.pareto_indices_table,
             'pareto_front_table': self.pareto_front_table,
-            'js_div_list': self.js_div_list
+            'js_div_list': self.js_div_list,
+            'converged_pf_table': self.converged_pf_table,
+            'mode 1 generations': generation,
+            'mode 2 generations': counter
         }
 
 
-def cleanupsamples(samples, nobj, precision=1):
-    """Clean up samples by rounding and removing duplicates."""
-    samples = np.round(samples, precision)
-    c, i = np.unique(samples[:, :nobj], axis=0, return_index=True)
-    newsamples = samples[i, :]  # note - these have been sorted into increasing magnitude
-    if precision == 0:
-        newsamples = np.array(newsamples, dtype=np.int32)
-    return newsamples
-
-# def generate_example_data(r, shape, scale, n_items=100, seed=1124):
-#     r = make_pos_def(r)
-#     item_rng = random.default_rng(seed=seed)
-#     items = gamma_GC(r, n_items, shape, scale, rng=item_rng)
-#     items = cleanupsamples(items, nobj=3, precision=0)
-    
-#     return items
-
-# biased sampling?
-# def generate_example_data(r, shape, scale, n_items=100, seed=1124):
-#     r = make_pos_def(r)
-#     item_rng = random.default_rng(seed=seed)
-#     items = gamma_GC(r, n_items*2, shape, scale, rng=item_rng)
-#     items = cleanupsamples(items, nobj=3, precision=0)
-#     selected_idx = item_rng.choice(items.shape[0], size=n_items, replace=False)
-#     items = np.unique(items[selected_idx], axis=0) # make sure to obtain n_items unique items
-#     print(f"Number of items: {items.shape[0]}")
-#     return items
-
-def generate_example_data(r, shape, scale, n_items=100, seed=1124, precision = 0):
-    #r = make_pos_def(r)
-    item_rng = random.default_rng(seed=seed)
-    
-    batch = max(5, n_items // 10)
-    uniq = set()
-    items = []
-    while len(items) < n_items:
-        new = gamma_GC(r, batch, shape, scale, rng=item_rng)
-        new = cleanupsamples(new, nobj=3, precision=precision)
-        for item in new:
-            key = tuple(item)
-            if key not in uniq:
-                uniq.add(key)
-                items.append(item)
-                if len(items) == n_items:
-                    break
-    return np.unique(np.array(items), axis=0), r # here np.unique is used for sorting
-
-def organize_results(results):
-    js_div_list = results['js_div_list']
-    distribution_table = results['distribution_table']
-    pareto_indices_table = []
-    pareto_front_table = []
-    for j in range(len(results['pareto_front_table'])):
-        pareto_indices_table.append(np.unique(np.sort(results['pareto_indices_table'][j],axis = 1),axis =0))
-        pareto_front_table.append(np.unique(results['pareto_front_table'][j], axis=0))
-    return js_div_list, distribution_table, pareto_indices_table, pareto_front_table
-
+# obtain converged Pareto Front independently of EDA
 def converged_pf_from_dist(
     distribution, items, pareto_solutions, capacity, n_selected, n_obj,f_seed = 1234, 
     sample_size=1000, max_iters=100, max_no_change=2):
@@ -479,26 +498,33 @@ def converged_pf_from_dist(
 
 def main():
     # Set parameters
-    n_items = 20
-    n_selected = 5
+    n_items = 60
+    n_selected = 6
     n_obj = 3
     n_con = 1
-    shape = [3.0, 4.0, 2.0, 8.0]
-    scale = [2.0, 3, 2, 1.0]
-    r = np.array([      
-        [1.0, 0.4, -0.5, 0.3],
-        [0.4, 1.0, 0.5, 0.4],
-        [-0.5, 0.5, 1.0, 0.2],
-        [0.3, 0.4, 0.2, 1.0],
-    ])
-    capacity = int(shape[-1]*scale[-1]*n_selected)
-    pop_size = 1000
-    generations = 100 # do not matter if check convergence
-    max_no_improve_gen = 20
+    # capacity = 60
+    pop_size = 1_000
+    generations = 100 
+    max_no_improve_gen = 5
+    max_row_diff = 5
     
     # Generate data
-    items = generate_example_data(r, shape, scale, n_items=n_items)
-    
+    # items = generate_example_data(r, shape, scale, n_items=n_items)
+    kn = loadmat('/data/knapsack/runB/kn_2_3_allneg_60_6_3.mat')
+    items = kn['items'][0]
+    capacity = kn['capacity']
+
+    # human input
+    # aspi_item = np.array([15, 2, 4, 9, 8])
+    # item_scores = items[:, :n_obj] @ aspi_item
+    # r = item_scores.argsort().argsort().astype(float)
+    # s = r / (r.max() + 1e-12)
+    # logits = s / 0.1
+    # logits -= logits.max() 
+    # p_rank = np.exp(logits)
+    # p_rank /= p_rank.sum()
+    p_rank = None  # set p_rank to None if no human input
+
     # Run EDA
     eda = KnapsackEDA(
         items=items,
@@ -508,61 +534,26 @@ def main():
         pop_size=pop_size,
         generations=generations,
         max_no_improve_gen=max_no_improve_gen,
-        seed=1123
+        max_row_diff=max_row_diff,
+        seed=1123,
+        p_rank=p_rank
     )
-    
     results = eda.run()
 
-    # Print results
-    print(f"Number of unique items: {items.shape[0]}")
-    print(f"Final Pareto front size: {np.unique(results['pareto_front_table'][-1], axis=0).shape[0]}")
-    print(f"Final Pareto front: {np.unique(results['pareto_front_table'][-1], axis=0)}")
-    print(f"Final JS divergence: {results['js_div_list'][-1]:.6f}")
-    
     # Save results
-    output_dir = "/home/tailai/research/multiobjective/eda_results"
+    if p_rank is not None:
+        result_type = "eda_human"
+    else:
+        result_type = "eda"
+
+    output_dir = "/home/tailai/multiobjective/eda_results"
     os.makedirs(output_dir, exist_ok=True)
-
-    distribution_table = results['distribution_table']
-    if len(distribution_table) > 0:
-        dist_df = pd.DataFrame(np.vstack(distribution_table))
-        dist_df.index.name = 'generation'
-        dist_df.columns = [f"item_{i}" for i in range(dist_df.shape[1])]
-        dist_df.to_csv(os.path.join(output_dir, f"distribution_table_{n_items}_{n_selected}.csv"))
-
-    js_div_list = results['js_div_list']
-    if len(js_div_list) > 0:
-        js_df = pd.DataFrame({
-            'generation': np.arange(1, len(js_div_list) + 1, dtype=np.int32),
-            'js_divergence': js_div_list
-        })
-        js_df.to_csv(os.path.join(output_dir, f"js_div_list_{n_items}_{n_selected}.csv"), index=False)
-
-    pareto_indices_table = results['pareto_indices_table']
-    pareto_front_table = results['pareto_front_table']
-    if len(pareto_indices_table) > 0:
-        np.savez_compressed(
-            os.path.join(output_dir, f"pareto_indices_table_{n_items}_{n_selected}.npz"),
-            **{f"gen_{i+1}": arr for i, arr in enumerate(pareto_indices_table)}
-        )
-    if len(pareto_front_table) > 0:
-        np.savez_compressed(
-            os.path.join(output_dir, f"pareto_front_table_{n_items}_{n_selected}.npz"),
-            **{f"gen_{i+1}": arr for i, arr in enumerate(pareto_front_table)}
-        )
-
-    # Plot convergence
-    plt.figure(figsize=(10, 6))
-    plt.plot(np.arange(1, len(js_div_list) + 1, 1), js_div_list)
-    plt.xlabel('Generations')
-    plt.ylabel('Jensen-Shannon Divergence')
-    plt.yscale('log')
-    plt.title('Jensen-Shannon Divergence between successive generations')
-    plt.grid(True)
-    plt.show()
-    
-    return results
-
+    file_path = os.path.join(output_dir, f"{result_type}_{n_items}_{n_selected}_{n_obj}.pkl")
+    if os.path.exists(file_path):
+        print(f"File {file_path} already exists")
+    else:
+        with open(file_path, 'wb') as f:
+            pickle.dump(results, f)
 
 if __name__ == "__main__":
     results = main()
