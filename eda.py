@@ -269,6 +269,7 @@ class KnapsackEDA:
         self.pareto_front_table = []
         self.js_div_list = []
         self.converged_pf_table = []
+        self.converged_pf_population_table = []
     
     def _generate_initial_population(self):
         """Generate initial population based on tournament selection."""
@@ -442,8 +443,9 @@ class KnapsackEDA:
             self.pareto_front_table.append(pareto_front.copy())
             self.js_div_list.append(js_div)
 
-            front_0 = np.unique(self.selected_objectives, axis=0)
-            front_0 = front_0[np.lexsort(front_0.T[::-1])]
+            front_0, unique_idx = np.unique(self.selected_objectives, axis=0, return_index=True)
+            # front_0 = front_0[np.lexsort(front_0.T[::-1])]
+            front_0_population = self.selected_population[unique_idx]
             if prev_front_0 is not None:
                 if row_diff(prev_front_0, front_0) <= self.max_row_diff:
                     no_improve_gen += 1
@@ -453,6 +455,7 @@ class KnapsackEDA:
                 no_improve_gen = 0
             
             self.converged_pf_table.append(front_0.copy())
+            self.converged_pf_population_table.append(front_0_population.copy())
             prev_front_0 = front_0
 
         return {
@@ -460,6 +463,7 @@ class KnapsackEDA:
             'pareto_front_table': self.pareto_front_table,
             'js_div_list': self.js_div_list,
             'converged_pf_table': self.converged_pf_table,
+            'converged_pf_population_table': self.converged_pf_population_table,
             'mode 1 generations': generation,
             'mode 2 generations': counter
         }
@@ -506,7 +510,7 @@ def main():
     pop_size = 1_000
     generations = 100 
     max_no_improve_gen = 5
-    max_row_diff = 5
+    max_row_diff = 5  # can set to be 1.5% of the number of Pareto front (depends on number of objectives)
     
     # Generate data
     # items = generate_example_data(r, shape, scale, n_items=n_items)
