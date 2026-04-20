@@ -1,0 +1,61 @@
+Name,Military,Knowledge,Politics,Cost
+Stock,3,2,10,2
+Central Bank,10,2,8,15
+Shipyard,7,11,7,9
+Steel Mill,4,6,9,3
+Oil Refining,11,3,3,12
+Warehouse,3,13,7,7
+Highways,9,1,8,6
+Free Trade,1,13,5,10
+Tax Cuts,4,14,4,13
+Subsidies,7,6,8,5
+Cargo Port,10,3,6,6
+Bond Market,9,4,5,5
+Air Force,13,10,9,19
+Naval Base,12,11,4,9
+Missiles,11,12,8,13
+Radar,14,10,3,16
+Drone Base,15,14,12,19
+Arsenal,12,6,3,4
+Weapons Lab,14,3,4,8
+Draft,15,7,6,5
+Arms Control,14,8,3,10
+Defense Pact,16,6,13,12
+Spy Academy,16,5,7,2
+Peace Treaty,15,10,3,14
+University,18,17,10,19
+Research Lab,10,13,9,11
+Observatory,13,17,12,19
+Space Center,11,18,2,11
+Library,9,14,11,14
+Data Center,8,19,9,14
+Hospital,2,17,15,17
+Patent Law,7,16,4,13
+Open Data,16,14,13,5
+Grant Fund,11,15,8,11
+Medical Lab,7,16,6,11
+Weather Lab,4,16,12,16
+Art Museum,7,9,8,12
+Film Studio,6,13,12,16
+Music Hall,4,5,3,2
+Opera House,6,6,10,4
+Stadium,5,9,6,14
+Theater,2,5,10,13
+Gallery,4,3,9,9
+Free Press,4,2,3,7
+Arts Grant,5,1,7,10
+Copyright,5,5,9,7
+Dance Hall,6,14,9,9
+Concert Hall,5,5,5,6
+Courthouse,11,2,10,14
+City Hall,14,6,12,14
+Parliament,10,7,15,16
+Diplomacy,9,2,13,1
+Capitol,14,1,16,16
+Town Hall,10,4,10,5
+Civic Center,11,8,9,16
+Civil Rights,1,9,15,5
+Election Law,12,7,16,17
+Term Limits,6,1,17,13
+Tax Office,9,4,14,7
+Border Post,12,12,17,16

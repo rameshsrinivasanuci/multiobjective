@@ -1,0 +1,61 @@
+Name,Economy,Military,Knowledge,Culture,Politics
+Stock,85,20,11,40,45
+Central Bank,91,33,18,30,61
+Shipyard,92,29,56,51,24
+Steel Mill,76,14,48,21,70
+Oil Refining,82,34,13,19,10
+Warehouse,91,11,50,23,39
+Highways,72,26,10,56,36
+Free Trade,72,13,48,20,17
+Tax Cuts,72,22,52,20,27
+Subsidies,83,32,45,10,36
+Cargo Port,83,28,19,26,10
+Bond Market,91,31,41,29,17
+Air Force,18,72,51,10,70
+Naval Base,22,80,51,21,27
+Missiles,35,76,53,10,40
+Radar,12,84,46,39,23
+Drone Base,14,81,54,18,66
+Arsenal,36,81,19,56,10
+Weapons Lab,10,89,12,19,16
+Draft,29,86,28,61,33
+Arms Control,38,81,37,47,33
+Defense Pact,36,83,29,12,58
+Spy Academy,19,85,14,26,45
+Peace Treaty,29,95,56,56,23
+University,19,55,81,44,61
+Research Lab,19,39,72,52,59
+Observatory,45,55,95,45,67
+Space Center,23,41,80,65,20
+Library,49,27,83,12,59
+Data Center,50,38,84,49,44
+Hospital,12,10,85,54,59
+Patent Law,40,37,95,10,23
+Open Data,31,52,75,36,75
+Grant Fund,48,45,91,32,33
+Medical Lab,45,44,95,56,37
+Weather Lab,28,15,88,22,44
+Art Museum,18,26,48,94,43
+Film Studio,28,26,61,78,52
+Music Hall,28,10,37,79,30
+Opera House,15,26,19,77,60
+Stadium,28,26,52,84,24
+Theater,28,16,22,83,62
+Gallery,28,10,10,72,38
+Free Press,20,22,15,82,11
+Arts Grant,20,14,13,78,34
+Copyright,28,26,12,82,46
+Dance Hall,28,26,64,92,44
+Concert Hall,28,26,21,85,27
+Courthouse,45,45,15,51,76
+City Hall,12,45,33,17,80
+Parliament,38,34,45,55,92
+Diplomacy,45,45,18,23,80
+Capitol,29,45,11,55,82
+Town Hall,35,45,19,55,74
+Civic Center,18,45,26,36,75
+Civil Rights,30,25,45,54,84
+Election Law,21,45,45,55,80
+Term Limits,45,45,12,55,86
+Tax Office,11,44,29,55,92
+Border Post,37,45,45,10,81
