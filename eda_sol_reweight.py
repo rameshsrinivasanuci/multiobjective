@@ -336,12 +336,13 @@ class KnapsackEDA:
         selected_objectives = objectives[select_indices]
         
         n_items = self.items.shape[0]
-        freq = np.bincount(selected_population.flatten(), minlength=n_items)
+        freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                   n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
             freq *= reweight_prob
         distribution = np.ones(n_items) + freq
+        ### if bias is too weak, do distribution *= (reweight_prob + eps) ###
         distribution /= np.sum(distribution)
         
         return distribution, selected_population, selected_objectives
@@ -380,7 +381,7 @@ class KnapsackEDA:
         selected_objectives = objectives[select_indices]
         
         n_items = self.items.shape[0]
-        freq = np.bincount(selected_population.flatten(), minlength=n_items)
+        freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                   n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
@@ -413,7 +414,7 @@ class KnapsackEDA:
         selected_objectives = objectives[nd_idx]
 
         n_items = self.items.shape[0]
-        freq = np.bincount(selected_population.flatten(), minlength=n_items)
+        freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                   n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
