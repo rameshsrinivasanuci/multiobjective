@@ -215,7 +215,7 @@ def compute_reweight_prob(aspi, selected_population, selected_objectives,
         r /= (r.max() + 1e-12)
     else: 
         # larger number of solutions, sharper distribution for the same temp
-        r = sol_scores ### NOT WORKING WELL ###
+        r = sol_scores
     logits = r / temp
     logits -= logits.max() 
     w = np.exp(logits)
@@ -256,8 +256,7 @@ class KnapsackEDA:
     def __init__(self, items, capacity, 
                  n_selected, n_obj, 
                  pop_size=1000, generations=100, max_no_improve_gen=20, max_row_diff=5, seed=1123, 
-                 aspi=None, if_rank=False, temp=1, 
-                 population_no_bias=None, objectives_no_bias=None):
+                 aspi=None, if_rank=False, temp=1):
         """
         Initialize EDA algorithm.
         
@@ -295,20 +294,6 @@ class KnapsackEDA:
         self.temp = temp
         self.aspi = aspi
 
-        # population and objective for EDA without human bias
-        if self.aspi is not None:
-            if objectives_no_bias is None:
-                raise ValueError(
-                    "objectives_no_bias is required when aspi is not None"
-                )
-            if objectives_no_bias.shape[0] != population_no_bias.shape[0]:
-                raise ValueError(
-                    "objectives_no_bias must have one row per solution in population_no_bias"
-                )
-
-        self.population_no_bias = population_no_bias
-        self.objectives_no_bias = objectives_no_bias
-
         # State variables (will be initialized during run)
         self.distribution = None
         self.selected_population = None
@@ -321,24 +306,12 @@ class KnapsackEDA:
         self.js_div_list = []
         self.converged_pf_table = []
         self.converged_pf_population_table = []
-
-
+    
     def _generate_initial_population(self):
         """Generate initial population based on tournament selection."""
         n_items = self.items.shape[0]
-
+        distribution = np.ones(n_items) / n_items
         ### consider reweighting the distribution here ###
-        if self.population_no_bias is None:
-            distribution = np.ones(n_items) / n_items
-        else:
-            freq = np.bincount(self.population_no_bias.flatten(), minlength=n_items).astype(float)
-            if self.aspi is not None:
-                reweight_prob = compute_reweight_prob(self.aspi, self.population_no_bias, self.objectives_no_bias, 
-                                                    n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
-                freq *= reweight_prob
-            distribution = np.ones(n_items) + freq
-            distribution /= np.sum(distribution)
-        
         population = sample_population(
             self.items, distribution, self.pop_size, self.n_selected, 
             self.capacity, self.rng
@@ -362,6 +335,7 @@ class KnapsackEDA:
         selected_population = population[select_indices]
         selected_objectives = objectives[select_indices]
         
+        n_items = self.items.shape[0]
         freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
