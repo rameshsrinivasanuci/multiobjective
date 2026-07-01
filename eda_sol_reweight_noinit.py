@@ -336,13 +336,21 @@ class KnapsackEDA:
         selected_objectives = objectives[select_indices]
         
         n_items = self.items.shape[0]
-        freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
+        # freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
+        # if self.aspi is not None:
+        #     reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
+        #                                           n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
+        #     freq *= reweight_prob
+        # distribution = np.ones(n_items) + freq
+
+        ### if bias is too weak, do distribution *= (reweight_prob + eps) ###
         if self.aspi is not None:
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                   n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
-            freq *= reweight_prob
-        distribution = np.ones(n_items) + freq
-        ### if bias is too weak, do distribution *= (reweight_prob + eps) ###
+            distribution *= (reweight_prob + 0.01) # reweight probabilities max = 0.038, median = 0.016
+        else:
+            distribution = np.ones(n_items)
+            distribution += np.bincount(selected_population.flatten(), minlength=n_items)
         distribution /= np.sum(distribution)
         
         return distribution, selected_population, selected_objectives
@@ -381,12 +389,21 @@ class KnapsackEDA:
         selected_objectives = objectives[select_indices]
         
         n_items = self.items.shape[0]
-        freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
+        # freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
+        # if self.aspi is not None:
+        #     reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
+        #                                           n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
+        #     freq *= reweight_prob
+        # updated_distribution = np.ones(n_items) + freq
+        # updated_distribution /= np.sum(updated_distribution)
+        
         if self.aspi is not None:
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                   n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
-            freq *= reweight_prob
-        updated_distribution = np.ones(n_items) + freq
+            updated_distribution = self.distribution * (reweight_prob + 0.01) 
+        else:
+            updated_distribution = np.ones(n_items)
+            updated_distribution += np.bincount(selected_population.flatten(), minlength=n_items)
         updated_distribution /= np.sum(updated_distribution)
         
         self.distribution[self.distribution < 1E-08] = 1E-08
@@ -414,12 +431,21 @@ class KnapsackEDA:
         selected_objectives = objectives[nd_idx]
 
         n_items = self.items.shape[0]
-        freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
+        # freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
+        # if self.aspi is not None:
+        #     reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
+        #                                           n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
+        #     freq *= reweight_prob
+        # updated_distribution = np.ones(n_items) + freq
+        # updated_distribution /= np.sum(updated_distribution)
+
         if self.aspi is not None:
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                   n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
-            freq *= reweight_prob
-        updated_distribution = np.ones(n_items) + freq
+            updated_distribution = self.distribution * (reweight_prob + 0.01) 
+        else:
+            updated_distribution = np.ones(n_items)
+            updated_distribution += np.bincount(selected_population.flatten(), minlength=n_items)
         updated_distribution /= np.sum(updated_distribution)
         
         self.distribution[self.distribution < 1E-08] = 1E-08
