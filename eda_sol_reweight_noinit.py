@@ -369,14 +369,14 @@ class KnapsackEDA:
         ### distribution = 1 + prob ###
         distribution = np.ones(n_items)
         freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
-        if self.aspi is not None:
-            reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
-                                                  n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
+        # if self.aspi is not None:
+        #     reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
+        #                                           n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
             
-            reweight_prob_scaled = reweight_prob * (freq.sum() / reweight_prob.sum()) # rescale reweight_prob to the same as freq
-            distribution += reweight_prob_scaled
-        else:
-            distribution += freq
+        #     reweight_prob_scaled = reweight_prob * (freq.sum() / reweight_prob.sum()) # rescale reweight_prob to the same as freq
+        #     distribution += reweight_prob_scaled
+        # else:
+        distribution += freq
         distribution /= np.sum(distribution)
 
         return distribution, selected_population, selected_objectives
@@ -443,13 +443,13 @@ class KnapsackEDA:
 
         updated_distribution = np.ones(n_items)
         freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
-        if self.aspi is not None:
-            reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
-                                                  n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
-            reweight_prob_scaled = reweight_prob * (freq.sum() / reweight_prob.sum())
-            updated_distribution += reweight_prob_scaled
-        else:
-            updated_distribution += freq
+        # if self.aspi is not None:
+        #     reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
+        #                                           n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
+        #     reweight_prob_scaled = reweight_prob * (freq.sum() / reweight_prob.sum())
+        #     updated_distribution += reweight_prob_scaled
+        # else:
+        updated_distribution += freq
         updated_distribution /= np.sum(updated_distribution)
         
         self.distribution[self.distribution < 1E-08] = 1E-08
