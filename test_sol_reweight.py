@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-import eda_sol_reweight_noinit # no bias to initial distribution
+# import eda_sol_reweight_noinit # no bias to initial distribution
+import eda_standard
 
 def load_items(stimuli_dir: Path, trial_id: int) -> np.ndarray:
     csv_path = stimuli_dir / f"civ_items_trial_{trial_id}.csv"
@@ -40,7 +41,7 @@ def get_eda_params(items: np.ndarray) -> dict:
 
 def run_eda_pass(items: np.ndarray, params: dict, 
                  seed: int, aspi: np.ndarray, if_rank: bool, temp: float):
-    eda_process = eda_sol_reweight_noinit.KnapsackEDA(
+    eda_process = eda_standard.KnapsackEDA(
         items=items,
         capacity=params["capacity"],
         n_selected=params["n_selected"],
@@ -109,25 +110,35 @@ def gen_aspi(ref_sol, items):
     aspi = (ref_sol - items_q5*n_selected) / (items_q95*n_selected - items_q5*n_selected + 1e-12)
     return aspi 
 
+# def gen_aspi(percentile, items, n_selected):
+#     percentile_unique = np.unique(percentile)
+#     percent_ref = {}
+#     for p in percentile_unique:
+#         qp = np.percentile(items, p, axis=0)
+#         percent_ref[p] = qp
+#     aspi = np.array([percent_ref[p][i]*n_selected for i, p in enumerate(percentile)])
+#     return aspi
+
 def main():
     # run ref x temp pair
-    temps = np.linspace(0.1, 1, 10)
+    # temps = np.linspace(0.1, 1, 10)
+    temps = [0.1]
     percentiles = {
-        "qmax": np.array([100, 100, 100, 0, 0]),
-        "qmin": np.array([0, 0, 0, 100, 100]),
+        # "qmax": np.array([100, 100, 100, 0, 0]),
+        # "qmin": np.array([0, 0, 0, 100, 100]),
         "qmedian": np.array([50, 50, 50, 50, 50]),
-        "q95": np.array([95, 95, 95, 5, 5]),
-        "q75": np.array([75, 75, 75, 25, 25]),
-        "q60": np.array([60, 60, 60, 40, 40]),
-        "q40": np.array([40, 40, 40, 60, 60]),
-        "q25": np.array([25, 25, 25, 75, 75]),
-        "q5": np.array([5, 5, 5, 95, 95]),
-        "qsame": np.array([75, 75, 75, 75, 75]),
+        # "q95": np.array([95, 95, 95, 5, 5]),
+        # "q75": np.array([75, 75, 75, 25, 25]),
+        # "q60": np.array([60, 60, 60, 40, 40]),
+        # "q40": np.array([40, 40, 40, 60, 60]),
+        # "q25": np.array([25, 25, 25, 75, 75]),
+        # "q5": np.array([5, 5, 5, 95, 95]),
+        # "q100": np.array([100, 100, 100, 100, 100]),
     }
 
     trial_id = 8
     stimuli_dir = Path("card_game/stimuli")
-    output_dir = Path("data/eda_results/sol_reweight_runs/")
+    output_dir = Path("data/eda_results/test/")
     items = load_items(stimuli_dir=stimuli_dir, trial_id=trial_id)
     with open(f'card_game/eda_results/eda_trial{trial_id}.pkl', 'rb') as f:
         results = pickle.load(f)
@@ -143,7 +154,8 @@ def main():
         unit_aspi = aspi / (np.linalg.norm(aspi) + 1e-12)
 
         for temp in temps:
-            run_name = f"ref{name}_temp{temp:.1f}_trial{trial_id}"
+            # run_name = f"ref{name}_temp{temp:.1f}_trial{trial_id}"
+            run_name = "test3"
             eda_results = run_eda_pass(
                 items=items,
                 params=params,
