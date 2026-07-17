@@ -170,7 +170,8 @@ def standardize_objectives(objectives, items, n_obj,n_selected):
 def compute_reweight_prob(aspi, selected_population, selected_objectives, 
                           n_items, n_obj, if_rank=False, temp=1):  
     # compute weights using softmax
-    sol_scores = selected_objectives[:, :n_obj] @ aspi
+    # sol_scores = selected_objectives[:, :n_obj] @ aspi
+    sol_scores = -np.sum((selected_objectives[:, :n_obj] - aspi) ** 2, axis=1)
     
     if if_rank:  
         # effect of temp is the same for different number of solutions
@@ -307,8 +308,8 @@ class KnapsackEDA:
         distribution = np.ones(n_items)
         freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
-            selected_objectives_stan = standardize_objectives(selected_objectives, self.items, self.n_obj, self.n_selected)
-            reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives_stan, 
+            # selected_objectives_stan = standardize_objectives(selected_objectives, self.items, self.n_obj, self.n_selected)
+            reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                   n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
             
             reweight_prob_scaled = reweight_prob * (freq.sum() / reweight_prob.sum()) # rescale reweight_prob to the same as freq
@@ -354,8 +355,8 @@ class KnapsackEDA:
         updated_distribution = np.ones(n_items)
         freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
-            selected_objectives_stan = standardize_objectives(selected_objectives, self.items, self.n_obj, self.n_selected)
-            reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives_stan, 
+            # selected_objectives_stan = standardize_objectives(selected_objectives, self.items, self.n_obj, self.n_selected)
+            reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                 n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
             reweight_prob_scaled = reweight_prob * (freq.sum() / reweight_prob.sum())
             updated_distribution += reweight_prob_scaled
@@ -393,8 +394,8 @@ class KnapsackEDA:
         updated_distribution = np.ones(n_items)
         freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
-            selected_objectives_stan = standardize_objectives(selected_objectives, self.items, self.n_obj, self.n_selected)
-            reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives_stan, 
+            # selected_objectives_stan = standardize_objectives(selected_objectives, self.items, self.n_obj, self.n_selected)
+            reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                   n_items, self.n_obj, if_rank=self.if_rank, temp=self.temp)
             reweight_prob_scaled = reweight_prob * (freq.sum() / reweight_prob.sum())
             updated_distribution += reweight_prob_scaled
