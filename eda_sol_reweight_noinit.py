@@ -521,7 +521,7 @@ class KnapsackEDA:
         generation = 0
         while no_improve_gen < self.max_no_improve_gen:
             generation += 1
-            # print(f"Mode 1 generation {generation} (no improve count: {no_improve_gen})")
+            print(f"Mode 1 generation {generation} (no improve count: {no_improve_gen})")
             self.distribution, self.selected_population, self.selected_objectives, \
                 pareto_indices, js_div = self._update_distribution()
             # print(f"number of front 0: {pareto_indices.shape[0]}")
@@ -549,9 +549,10 @@ class KnapsackEDA:
         no_improve_gen = 0
         counter = 0 
         prev_front_0 = None
-        while no_improve_gen < 1:
+        # while no_improve_gen < 1:
+        while no_improve_gen < self.max_no_improve_gen:
             counter += 1
-            # print(f"Mode 2 generation {counter} (no improve count: {no_improve_gen})")
+            print(f"Mode 2 generation {counter} (no improve count: {no_improve_gen})")
             self.distribution, self.selected_population, self.selected_objectives, \
                 pareto_indices, js_div = self._converged_pf()
             # print(f"number of front 0: {pareto_indices.shape[0]}")
