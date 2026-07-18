@@ -2,3 +2,13 @@
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Pickle files
+*.pkl
+*.pickle
+
+# CSV files
+*.csv
+
+# PNG files
+*.png
