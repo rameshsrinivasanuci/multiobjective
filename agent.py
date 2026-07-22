@@ -1,4 +1,5 @@
 import pickle
+import uuid
 from pathlib import Path
 
 import numpy as np
@@ -18,16 +19,17 @@ from mrs import (
     save_mrs_results,
 )
 
-# Default aspiration levels keyed by n_obj (maximize-style objectives).
-ASPI = {
-    5: np.array([80, 55, 110, 100, 100]),
-}
 
-
-def get_items(n_obj, items_seed):
+def get_items(trial_id):
+    """Load item table for the trial sent by the client."""
     return pd.read_csv(
-        f"data/items/items_obj{n_obj}_seed{items_seed}.csv", header=None
+        f"data/items/items_{trial_id}.csv", header=None
     ).values
+
+
+def get_aspi(slider_values):
+    """Convert client slider values into an aspiration vector."""
+    return np.asarray(slider_values, dtype=float)
 
 
 def get_params(n_obj, items):
@@ -50,12 +52,6 @@ def get_params(n_obj, items):
     }
 
 
-def get_aspi(n_obj):
-    if n_obj not in ASPI:
-        raise ValueError(f"No aspiration levels defined for n_obj={n_obj}")
-    return ASPI[n_obj].copy()
-
-
 def run_eda(params, seed, aspi=None, temp=None):
     """Run plain EDA, or human-guided EDA when aspi/temp are provided."""
     common = dict(
@@ -76,8 +72,8 @@ def run_eda(params, seed, aspi=None, temp=None):
     ).run()
 
 
-def save_pickle(run_type, seed, results, output_dir):
-    path = Path(output_dir) / f"{run_type}_{seed}.pkl"
+def save_pickle(run_type, sub_id, run_id, results, output_dir):
+    path = Path(output_dir) / f"{run_type}_{sub_id}_{run_id}.pkl"
     if path.exists():
         raise ValueError(f"File {path} already exists")
     with open(path, "wb") as f:
@@ -90,18 +86,25 @@ def ensure_dirs(*dirs):
         Path(d).mkdir(parents=True, exist_ok=True)
 
 
-def main():
-    sub_id = 99
+def main(trial_id, slider_values):
+    """
+    Run one trial using values from the client request.
+
+    Expected client payload fields:
+        trial["trial_id"] -> items CSV lookup
+        slider_values     -> aspiration levels (aspi)
+    """
+    sub_id = 0
+    run_id = str(uuid.uuid4())
     run_type = "hg_eda"  # "eda" | "hg_eda"
-    items_seed = 1125
-    n_obj = 5
     density_threshold = 0.8
     temp = 0.1  # only used for hg_eda
 
-    items = get_items(n_obj, items_seed)
+    items = get_items(trial_id)
+    n_obj = items.shape[1] - 1
     params = get_params(n_obj, items)
-    aspi = get_aspi(n_obj)
-    seed = sub_id + items_seed
+    aspi = get_aspi(slider_values)
+    seed = sub_id + int(trial_id)
 
     # --- EDA ---
     if run_type == "eda":
@@ -116,11 +119,11 @@ def main():
     out_mrs = Path("data/results/mrs")
     ensure_dirs(out_eda, out_pf, out_mrs)
 
-    save_pickle(run_type, sub_id, results, out_eda)
+    save_pickle(run_type, sub_id, run_id, results, out_eda)
 
     # --- PF post-process ---
     pf = density_filter(results["converged_pf_table"][-1], density_threshold)
-    df, _ = pf_to_csv(pf, out_pf, run_type, sub_id)
+    df, _ = pf_to_csv(pf, out_pf, run_type, sub_id, run_id)
 
     # --- MRS at aspiration-nearest point ---
     mrs_params = get_mrs_params()
@@ -130,12 +133,21 @@ def main():
         info["data"], mrs_params["k"], info["d"], info["iqr"], query_idx
     )
 
-    save_mrs_results(run_type, sub_id, betas_raw, betas, out_mrs, info["obj_names"])
+    save_mrs_results(run_type, sub_id, run_id, betas_raw, betas, out_mrs, info["obj_names"])
     plot_bar_chart(
         betas_raw, info["obj_names"], query_pt, info["d"],
-        out_mrs, run_type, sub_id, obj_colors=OBJ_COLORS,
+        out_mrs, run_type, sub_id, run_id, obj_colors=OBJ_COLORS,
     )
+
+    return {
+        "rec": query_pt,
+        "mrs": betas_raw,
+    }
 
 
 if __name__ == "__main__":
-    main()
+    # Example local call; production path passes these from the TCP client.
+    raise SystemExit(
+        "Call main(trial_id, slider_values) with values from the client "
+        "(trial['trial_id'] and slider_values)."
+    )

@@ -27,10 +27,10 @@ def density_filter(pf, threshold, n_neighbors=10):
     return pf[sparse_score <= cutoff]
 
 
-def pf_to_csv(pf, output_dir, run_type, sub_id):
+def pf_to_csv(pf, output_dir, run_type, sub_id, run_id):
     obj_cols = [f"o{i}" for i in range(pf.shape[1])]
     df = pd.DataFrame(pf, columns=obj_cols).astype(int)
-    pf_path = Path(output_dir) / f"{run_type}_{sub_id}_pf.csv"
+    pf_path = Path(output_dir) / f"{run_type}_{sub_id}_{run_id}_pf.csv"
     df.to_csv(pf_path, index=False)
     print(f"Saved {len(df)} points → {pf_path}")
     return df, pf_path
@@ -78,11 +78,11 @@ def compute_mrs_at_query(data, k, d, iqr, query_idx):
     return betas_raw, betas
 
 
-def save_mrs_results(run_type, seed, betas_raw, betas, output_dir, obj_names):
+def save_mrs_results(run_type, sub_id, run_id, betas_raw, betas, output_dir, obj_names):
     """Save raw and IQR-scaled MRS matrices. Raises if either path exists."""
     output_dir = Path(output_dir)
-    raw_path = output_dir / f"{run_type}_{seed}_betas_raw.csv"
-    scaled_path = output_dir / f"{run_type}_{seed}_betas.csv"
+    raw_path = output_dir / f"{run_type}_{sub_id}_{run_id}_betas_raw.csv"
+    scaled_path = output_dir / f"{run_type}_{sub_id}_{run_id}_betas.csv"
     for path in (raw_path, scaled_path):
         if path.exists():
             raise ValueError(f"File {path} already exists")
@@ -92,8 +92,8 @@ def save_mrs_results(run_type, seed, betas_raw, betas, output_dir, obj_names):
     return raw_path, scaled_path
 
 
-def plot_bar_chart(betas_raw, obj_names, query_pt, d, output_dir, run_type, seed,
-                   obj_colors=None):
+def plot_bar_chart(betas_raw, obj_names, query_pt, d, output_dir, run_type, sub_id,
+                   run_id, obj_colors=None):
     obj_colors = obj_colors or OBJ_COLORS
     output_dir = Path(output_dir)
 
@@ -129,7 +129,7 @@ def plot_bar_chart(betas_raw, obj_names, query_pt, d, output_dir, run_type, seed
         ax.set_xlim(-0.5, len(others) - 0.5)
 
     plt.tight_layout()
-    out_path = output_dir / f"{run_type}_{seed}_mrs_bar_chart.png"
+    out_path = output_dir / f"{run_type}_{sub_id}_{run_id}_mrs_bar_chart.png"
     fig.savefig(out_path)
     plt.close(fig)
     return out_path
