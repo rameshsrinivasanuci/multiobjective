@@ -173,9 +173,18 @@ def compute_reweight_prob(aspi, selected_population, selected_objectives,
     # sol_scores = selected_objectives[:, :n_obj] @ aspi
 
     # standardization
-    stan_objectives = standardize_objectives(selected_objectives, items, n_obj, n_selected)
-    stan_aspi = standardize_objectives(aspi, items, n_obj, n_selected)
-    # compute score using squared distance
+    # stan_objectives = standardize_objectives(selected_objectives[:, :n_obj], items, n_obj, n_selected)
+    # stan_aspi = standardize_objectives(aspi, items, n_obj, n_selected)
+    # sol_scores = -np.sum((stan_objectives - stan_aspi) ** 2, axis=1)
+
+    # sol_scores = -np.sum((selected_objectives[:, :n_obj] - aspi) ** 2, axis=1)
+
+    q95 = np.percentile(selected_objectives[:, :n_obj], 95, axis=0)
+    q5 = np.percentile(selected_objectives[:, :n_obj], 5, axis=0)
+    stan_objectives = (selected_objectives[:, :n_obj] - q5) / (q95 - q5 + 1e-12)
+    if stan_objectives.shape[1] != aspi.shape[0]:
+        raise ValueError(f"aspi and stan_objectives have different number of objectives: {stan_objectives.shape[1]} != {aspi.shape[0]}")
+    stan_aspi = (aspi - q5) / (q95 - q5 + 1e-12)
     sol_scores = -np.sum((stan_objectives - stan_aspi) ** 2, axis=1)
     
     if if_rank:  
