@@ -138,6 +138,7 @@ def run_trial_computation(
     return {
         "rec": np.asarray(result["rec"], dtype=float).tolist(),
         "mrs": np.asarray(result["mrs"], dtype=float).tolist(),
+        "score": int(result["score"]),
     }
 
 

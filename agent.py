@@ -86,6 +86,21 @@ def ensure_dirs(*dirs):
         Path(d).mkdir(parents=True, exist_ok=True)
 
 
+def compute_game_score(query_pt, pf):
+    """
+    Percentage of PF solutions that query_pt beats in more than half the objectives.
+
+    Maximization: query_pt beats a solution on an objective when its value is
+    strictly greater. A solution counts if that holds for > n_obj / 2 objectives.
+    """
+    query_pt = np.asarray(query_pt, dtype=float)
+    pf = np.asarray(pf, dtype=float)
+    n_obj = pf.shape[1]
+    n_wins = np.sum(query_pt > pf, axis=1)
+    beaten = n_wins > (n_obj / 2)
+    return 100.0 * beaten.mean()
+
+
 def main(trial_id, slider_values):
     """
     Run one trial using values from the client request.
@@ -132,16 +147,19 @@ def main(trial_id, slider_values):
     betas_raw, betas = compute_mrs_at_query(
         info["data"], mrs_params["k"], info["d"], info["iqr"], query_idx
     )
-
     save_mrs_results(run_type, sub_id, run_id, betas_raw, betas, out_mrs, info["obj_names"])
     plot_bar_chart(
         betas_raw, info["obj_names"], query_pt, info["d"],
         out_mrs, run_type, sub_id, run_id, obj_colors=OBJ_COLORS,
     )
+    
+    # --- compute game score ---
+    game_score = compute_game_score(query_pt, pf)
 
     return {
         "rec": query_pt,
         "mrs": betas_raw,
+        "score": game_score,
     }
 
 
