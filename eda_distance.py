@@ -14,17 +14,17 @@ import pickle
 
 def get_objectives(samples, indices, nobj):
     """Calculate objectives for given solution indices."""
-    objectives = np.zeros((indices.shape[0], nobj), dtype='int32')
+    objectives = np.zeros((indices.shape[0], nobj), dtype='float64')
     for j in range(indices.shape[0]):
-        objectives[j, :] = np.sum(samples[indices[j], :nobj], axis=0, dtype=np.int32)
+        objectives[j, :] = np.sum(samples[indices[j], :nobj], axis=0)
     return objectives
 
 
 def get_constraints(samples, indices, nobj, ncon):
     """Calculate constraints for given solution indices."""
-    constraints = np.zeros((indices.shape[0], ncon), dtype='int32')
+    constraints = np.zeros((indices.shape[0], ncon), dtype='float64')
     for j in range(indices.shape[0]):
-        constraints[j, :] = np.sum(samples[indices[j], nobj:], axis=0, dtype=np.int32)
+        constraints[j, :] = np.sum(samples[indices[j], nobj:], axis=0)
     constraints = np.squeeze(constraints)
     return constraints
 
