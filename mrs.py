@@ -29,7 +29,7 @@ def density_filter(pf, threshold, n_neighbors=10):
 
 def pf_to_csv(pf, output_dir, run_type, sub_id, run_id):
     obj_cols = [f"o{i}" for i in range(pf.shape[1])]
-    df = pd.DataFrame(pf, columns=obj_cols).astype(int)
+    df = pd.DataFrame(pf, columns=obj_cols)
     pf_path = Path(output_dir) / f"{run_type}_{sub_id}_{run_id}_pf.csv"
     df.to_csv(pf_path, index=False)
     print(f"Saved {len(df)} points → {pf_path}")
@@ -128,7 +128,6 @@ def plot_bar_chart(betas_raw, obj_names, query_pt, d, output_dir, run_type, sub_
         ax.grid(True, axis="y", lw=0.3, color="#DDDDDD")
         ax.set_xlim(-0.5, len(others) - 0.5)
 
-    plt.tight_layout()
     out_path = output_dir / f"{run_type}_{sub_id}_{run_id}_mrs_bar_chart.png"
     fig.savefig(out_path)
     plt.close(fig)

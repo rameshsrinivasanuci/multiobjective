@@ -23,8 +23,8 @@ from mrs import (
 def get_items(trial_id):
     """Load item table for the trial sent by the client."""
     return pd.read_csv(
-        f"data/items/items_{trial_id}.csv", header=None
-    ).values
+        f"data/items/trial_{trial_id}.csv"
+    ).to_numpy(float)
 
 
 def get_aspi(slider_values):
@@ -34,16 +34,19 @@ def get_aspi(slider_values):
 
 def get_params(n_obj, items):
     if n_obj == 3:
-        n_selected, max_row_diff = 6, 5
+        max_row_diff = 5
     elif n_obj == 5:
-        n_selected, max_row_diff = 10, 500
+        max_row_diff = 500
+    elif n_obj == 9:
+        max_row_diff = 750
     else:
         raise ValueError(f"Number of objectives {n_obj} not supported")
 
     return {
         "items": items,
-        "capacity": n_selected * 10,
-        "n_selected": n_selected,
+        # "capacity": n_selected * 10, # for synthetic data
+        "capacity": 94.1,
+        "n_selected": 15,
         "n_obj": n_obj,
         "pop_size": 1_000,
         "generations": 100,
@@ -109,7 +112,7 @@ def main(trial_id, slider_values):
         trial["trial_id"] -> items CSV lookup
         slider_values     -> aspiration levels (aspi)
     """
-    sub_id = 0
+    sub_id = 998
     run_id = str(uuid.uuid4())
     run_type = "hg_eda"  # "eda" | "hg_eda"
     density_threshold = 0.8
