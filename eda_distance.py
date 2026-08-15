@@ -1,16 +1,8 @@
 import numpy as np
-import os
-from multitools import gamma_GC, make_pos_def
-from matplotlib import pyplot as plt
-import seaborn as sns
-import pandas as pd
-from itertools import islice, combinations
+import time
 from numpy import random
 from scipy.spatial.distance import jensenshannon
-from numba import jit, prange, njit
-from numba.typed import List
-from hdf5storage import loadmat
-import pickle
+from numba import jit, prange
 
 def get_objectives(samples, indices, nobj):
     """Calculate objectives for given solution indices."""
@@ -157,6 +149,43 @@ def sample_population(samples, distribution, pop_size, n_selected, capacity, rng
 
     return population
 
+# def _sample_chunk(args):
+#     costs, distribution, chunk_size, n_selected, capacity, seed = args
+#     rng = np.random.default_rng(seed)
+#     n_items = distribution.size
+#     out = np.empty((chunk_size, n_selected), dtype=np.int32)
+#     filled = 0
+#     while filled < chunk_size:
+#         knapsack = rng.choice(n_items, n_selected, p=distribution, replace=False)
+#         if costs[knapsack].sum() <= capacity:
+#             out[filled] = knapsack
+#             filled += 1
+#     return out
+
+# def sample_population(
+#     samples, distribution, pop_size, n_selected, capacity, rng, n_workers=None
+# ):
+#     # if n_workers is None:
+#     #     n_workers = os.cpu_count() or 1
+#     # n_workers = max(1, min(n_workers, pop_size))
+#     if n_workers is None:
+#         n_workers = 4
+#     costs = np.asarray(samples[:, -1], dtype=np.float64)
+#     distribution = np.asarray(distribution, dtype=np.float64)
+#     base, rem = divmod(pop_size, n_workers)
+#     chunk_sizes = [base + (i < rem) for i in range(n_workers)]
+#     seeds = rng.integers(0, 2**63 - 1, size=n_workers)
+#     tasks = [
+#         (costs, distribution, chunk_sizes[i], n_selected, capacity, int(seeds[i]))
+#         for i in range(n_workers)
+#         if chunk_sizes[i] > 0
+#     ]
+#     if n_workers == 1:
+#         return _sample_chunk(tasks[0])
+#     with Pool(processes=n_workers) as pool:
+#         chunks = pool.map(_sample_chunk, tasks)
+#     return np.vstack(chunks).astype(np.int32, copy=False)
+
 
 def standardize_objectives(objectives, items, n_obj, n_selected):
     
@@ -200,29 +229,14 @@ def compute_reweight_prob(aspi, selected_population, selected_objectives,
     w /= w.sum()
 
     # compute probabilities of items using weights
-    # version 1
-    # p = np.zeros(n_items)
-    # for i in range(n_items):
-    #     for k, sol in enumerate(selected_population):
-    #         if i in sol:
-    #             p[i] += w[k]
-
-    # version 2
-    # p = np.zeros(n_items)
-    # for k, sol in enumerate(selected_population):
-    #     for i in sol:
-    #         p[i] += w[k]
-    
-    # version 3
     n_sols, n_selected = selected_population.shape
     n_items = items.shape[0]
     sol_idx = np.repeat(np.arange(n_sols), n_selected)
     item_idx = selected_population.ravel()
     p = np.bincount(item_idx, weights=w[sol_idx], minlength=n_items).astype(float)
     
-    # p /= p.sum() #reweight probabilities to sum to 1
-    ## no reweighting, return the weighted frequency counts
-    return p
+    # p /= p.sum() # reweight probabilities to sum to 1
+    return p # no reweighting, return the weighted frequency counts
 
 
 class KnapsackEDA: 
@@ -253,9 +267,9 @@ class KnapsackEDA:
         pop_size : int
             Population size
         generations : int
-            Number of generations to run
+            Maximum number of generations for each mode (Mode 1 and Mode 2)
         max_no_improve_gen : int
-            Maximum number of generations without improvement
+            Stop a mode early after this many generations without improvement
         max_row_diff : int
             Maximum number of row differences between consecutive Pareto fronts
         seed : int
@@ -274,12 +288,10 @@ class KnapsackEDA:
         self.temp = temp
         self.aspi = aspi
 
-        # State variables (will be initialized during run)
         self.distribution = None
         self.selected_population = None
         self.selected_objectives = None
         
-        # Results storage
         self.distribution_table = []
         self.pareto_indices_table = []
         self.pareto_front_table = []
@@ -291,14 +303,13 @@ class KnapsackEDA:
         """Generate initial population based on tournament selection."""
         n_items = self.items.shape[0]
         distribution = np.ones(n_items) / n_items
-        ### consider reweighting the distribution here ###
+        
         population = sample_population(
             self.items, distribution, self.pop_size, self.n_selected, 
             self.capacity, self.rng
         )
         objectives = get_objectives(self.items, population, self.n_obj)
 
-        # Find current pareto front
         _, fronts_current = non_dominated_sort(objectives)
         pareto_indices = population[fronts_current[0]]
         
@@ -319,11 +330,9 @@ class KnapsackEDA:
         selected_objectives = objectives[select_indices]
         
         n_items = self.items.shape[0]
-        ### distribution = 1 + prob, remove normalization for p ###
         distribution = np.ones(n_items)
         freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
-            # selected_objectives_stan = standardize_objectives(selected_objectives, self.items, self.n_obj, self.n_selected)
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                   self.items, self.n_obj, self.n_selected, if_rank=self.if_rank, temp=self.temp)
             
@@ -343,7 +352,6 @@ class KnapsackEDA:
         )
         objectives = get_objectives(self.items, population, self.n_obj)
         
-        # Find current pareto front
         _, fronts_current = non_dominated_sort(objectives)
         pareto_indices = population[fronts_current[0]]
         
@@ -370,7 +378,6 @@ class KnapsackEDA:
         updated_distribution = np.ones(n_items)
         freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
-            # selected_objectives_stan = standardize_objectives(selected_objectives, self.items, self.n_obj, self.n_selected)
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                 self.items, self.n_obj, self.n_selected, if_rank=self.if_rank, temp=self.temp)
             reweight_prob_scaled = reweight_prob * (freq.sum() / reweight_prob.sum())
@@ -395,7 +402,6 @@ class KnapsackEDA:
         )
         objectives = get_objectives(self.items, population, self.n_obj)
 
-        # find current pareto front
         pareto_indices = population[non_dominated(objectives).astype(bool)]
 
         population = np.unique(np.sort(np.vstack((self.selected_population, population)), axis=1), axis=0)
@@ -409,7 +415,6 @@ class KnapsackEDA:
         updated_distribution = np.ones(n_items)
         freq = np.bincount(selected_population.flatten(), minlength=n_items).astype(float)
         if self.aspi is not None:
-            # selected_objectives_stan = standardize_objectives(selected_objectives, self.items, self.n_obj, self.n_selected)
             reweight_prob = compute_reweight_prob(self.aspi, selected_population, selected_objectives, 
                                                 self.items, self.n_obj, self.n_selected, if_rank=self.if_rank, temp=self.temp)
             reweight_prob_scaled = reweight_prob * (freq.sum() / reweight_prob.sum())
@@ -438,6 +443,8 @@ class KnapsackEDA:
             - pareto_front_table : List of pareto fronts per generation
             - js_div_list : Jensen-Shannon divergence per generation
         """
+        t0 = time.perf_counter()
+
         # Initialize
         self.distribution, self.selected_population, self.selected_objectives, pareto_indices = \
             self._generate_initial_population()
@@ -448,16 +455,16 @@ class KnapsackEDA:
         self.pareto_indices_table.append(pareto_indices.copy())
         self.pareto_front_table.append(pareto_front.copy())
     
-        # Mode 1: run until distribution converges
+        # Mode 1: run until distribution converges or max generations
         no_improve_gen = 0
         prev_js_div = None
         generation = 0
-        while no_improve_gen < self.max_no_improve_gen:
+        while (generation < self.generations
+               and no_improve_gen < self.max_no_improve_gen):
             generation += 1
-            print(f"Mode 1 generation {generation} (no improve count: {no_improve_gen})")
+            # print(f"Mode 1 generation {generation} (no improve count: {no_improve_gen})")
             self.distribution, self.selected_population, self.selected_objectives, \
                 pareto_indices, js_div = self._update_distribution()
-            # print(f"number of front 0: {pareto_indices.shape[0]}")
 
             pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
             for k in range(pareto_indices.shape[0]):
@@ -478,17 +485,16 @@ class KnapsackEDA:
                 no_improve_gen = 0
             prev_js_div = js_div
 
-        # Mode 2: run until Pareto Front converges
+        # Mode 2: run until Pareto Front converges or max generations
         no_improve_gen = 0
         counter = 0 
         prev_front_0 = None
-        # while no_improve_gen < 1:
-        while no_improve_gen < self.max_no_improve_gen:
+        while (counter < self.generations
+               and no_improve_gen < self.max_no_improve_gen):
             counter += 1
-            print(f"Mode 2 generation {counter} (no improve count: {no_improve_gen})")
+            # print(f"Mode 2 generation {counter} (no improve count: {no_improve_gen})")
             self.distribution, self.selected_population, self.selected_objectives, \
                 pareto_indices, js_div = self._converged_pf()
-            # print(f"number of front 0: {pareto_indices.shape[0]}")
 
             pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
             for k in range(pareto_indices.shape[0]):
@@ -500,10 +506,9 @@ class KnapsackEDA:
             self.js_div_list.append(js_div)
 
             front_0, unique_idx = np.unique(self.selected_objectives, axis=0, return_index=True)
-            # front_0 = front_0[np.lexsort(front_0.T[::-1])]
             front_0_population = self.selected_population[unique_idx]
             if prev_front_0 is not None:
-                if row_diff(prev_front_0, front_0) <= self.max_row_diff:
+                if row_diff(prev_front_0, front_0) <= self.max_row_diff * len(prev_front_0):
                     no_improve_gen += 1
                 else:
                     no_improve_gen = 0
@@ -513,6 +518,10 @@ class KnapsackEDA:
             self.converged_pf_table.append(front_0.copy())
             self.converged_pf_population_table.append(front_0_population.copy())
             prev_front_0 = front_0
+     
+        elapsed = time.perf_counter() - t0
+        print(f"EDA finished in {elapsed:.2f}s "
+              f"(mode 1: {generation} gens, mode 2: {counter} gens)")
 
         return {
             'distribution_table': self.distribution_table,
@@ -522,7 +531,8 @@ class KnapsackEDA:
             'converged_pf_table': self.converged_pf_table,
             'converged_pf_population_table': self.converged_pf_population_table,
             'mode 1 generations': generation,
-            'mode 2 generations': counter
+            'mode 2 generations': counter,
+            'elapsed_sec': elapsed,
         }
 
 
