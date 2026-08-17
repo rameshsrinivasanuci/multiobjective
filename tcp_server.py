@@ -4,6 +4,7 @@ import json
 import socket
 import struct
 import threading
+import traceback
 from typing import Any
 
 import numpy as np
@@ -124,21 +125,29 @@ def validate_slider_values(value: Any) -> list[float]:
 
 def run_trial_computation(
     trial: dict[str, Any],
+    submission_id: int,
     slider_values: list[float],
 ) -> dict[str, Any]:
     """
     Run agent.main for one trial and return JSON-serializable rec/mrs.
     """
+    sub_id = trial.get("sub_id")
+    if sub_id is None:
+        raise ValueError("'trial' must contain 'sub_id'.")
+    block_id = trial.get("block_id")
+    if block_id is None:
+        raise ValueError("'trial' must contain 'block_id'.")
     trial_id = trial.get("trial_id")
     if trial_id is None:
         raise ValueError("'trial' must contain 'trial_id'.")
 
-    result = main(trial_id, slider_values)
+    result = main(sub_id, block_id, trial_id, submission_id, slider_values)
 
     return {
         "rec": np.asarray(result["rec"], dtype=float).tolist(),
         "mrs": np.asarray(result["mrs"], dtype=float).tolist(),
         "score": int(result["score"]),
+        "rec_player_indices": np.asarray(result["rec_player_indices"], dtype=int).tolist(),
     }
 
 
@@ -168,8 +177,14 @@ def process_request(request: dict[str, Any]) -> dict[str, Any]:
         request.get("slider_values")
     )
 
+    submission_id = request.get("submission_id")
+    
+    if submission_id is None:
+        raise ValueError("'request' must contain 'submission_id'.")
+
     result = run_trial_computation(
         trial=trial,
+        submission_id=submission_id,
         slider_values=slider_values,
     )
 
@@ -204,6 +219,7 @@ def handle_client(
 
     except Exception as error:
         print(f"Request from {client_address} failed: {error}")
+        traceback.print_exc()
 
         error_response = {
             "ok": False,
