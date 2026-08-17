@@ -434,7 +434,7 @@ class KnapsackEDA:
             front_0, unique_idx = np.unique(self.selected_objectives, axis=0, return_index=True)
             front_0_population = self.selected_population[unique_idx]
             if prev_front_0 is not None:
-                if row_diff(prev_front_0, front_0) <= self.max_row_diff:
+                if row_diff(prev_front_0, front_0) <= self.max_row_diff * len(prev_front_0):
                     no_improve_gen += 1
                 else:
                     no_improve_gen = 0

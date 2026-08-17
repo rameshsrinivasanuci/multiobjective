@@ -247,10 +247,21 @@ class KnapsackEDA:
     population, and objectives across generations.
     """
     
-    def __init__(self, items, capacity, 
-                 n_selected, n_obj, 
-                 pop_size=1000, generations=100, max_no_improve_gen=20, max_row_diff=5, seed=1123, 
-                 aspi=None, if_rank=False, temp=1):
+    def __init__(
+        self, 
+        items, 
+        capacity, 
+        n_selected, 
+        n_obj, 
+        pop_size=1000, 
+        generations=100, 
+        max_no_improve_gen=20, 
+        max_row_diff=0.1, 
+        seed=1123, 
+        aspi=None, 
+        if_rank=False, 
+        temp=1
+    ):
         """
         Initialize EDA algorithm.
         
@@ -310,8 +321,8 @@ class KnapsackEDA:
         )
         objectives = get_objectives(self.items, population, self.n_obj)
 
-        _, fronts_current = non_dominated_sort(objectives)
-        pareto_indices = population[fronts_current[0]]
+        # _, fronts_current = non_dominated_sort(objectives)
+        # pareto_indices = population[fronts_current[0]]
         
         ranks, fronts = non_dominated_sort(objectives)
         distances_all_solutions = np.zeros(population.shape[0], dtype=float)
@@ -342,7 +353,7 @@ class KnapsackEDA:
             distribution += freq
         distribution /= np.sum(distribution)
 
-        return distribution, selected_population, selected_objectives, pareto_indices
+        return distribution, selected_population, selected_objectives #,pareto_indices
     
     def _update_distribution(self):
         """Update distribution and select new population."""
@@ -446,14 +457,14 @@ class KnapsackEDA:
         t0 = time.perf_counter()
 
         # Initialize
-        self.distribution, self.selected_population, self.selected_objectives, pareto_indices = \
+        self.distribution, self.selected_population, self.selected_objectives = \
             self._generate_initial_population()
         
-        pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
-        for k in range(pareto_indices.shape[0]):
-            pareto_front[k, :] = np.sum(self.items[pareto_indices[k, :], :], axis=0)
-        self.pareto_indices_table.append(pareto_indices.copy())
-        self.pareto_front_table.append(pareto_front.copy())
+        # pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
+        # for k in range(pareto_indices.shape[0]):
+        #     pareto_front[k, :] = np.sum(self.items[pareto_indices[k, :], :], axis=0)
+        # self.pareto_indices_table.append(pareto_indices.copy())
+        # self.pareto_front_table.append(pareto_front.copy())
     
         # Mode 1: run until distribution converges or max generations
         no_improve_gen = 0
