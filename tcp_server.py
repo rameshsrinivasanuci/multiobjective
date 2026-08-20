@@ -9,7 +9,8 @@ from typing import Any
 
 import numpy as np
 
-from agent import main
+import agent
+import agent_blind
 
 
 HOST = "127.0.0.1"
@@ -141,11 +142,36 @@ def run_trial_computation(
     if trial_id is None:
         raise ValueError("'trial' must contain 'trial_id'.")
 
-    result = main(sub_id, block_id, trial_id, submission_id, slider_values)
+    result = agent.main(sub_id, block_id, trial_id, submission_id, slider_values)
 
     return {
         "rec": np.asarray(result["rec"], dtype=float).tolist(),
         "mrs": np.asarray(result["mrs"], dtype=float).tolist(),
+        "score": int(result["score"]),
+        "rec_player_indices": np.asarray(result["rec_player_indices"], dtype=int).tolist(),
+    }
+
+
+def run_trial_blind_computation(
+    trial: dict[str, Any],
+    submission_id: int,
+    slider_values: list[float],
+) -> dict[str, Any]:
+
+    sub_id = trial.get("sub_id")
+    if sub_id is None:
+        raise ValueError("'trial' must contain 'sub_id'.")
+    block_id = trial.get("block_id")
+    if block_id is None:
+        raise ValueError("'trial' must contain 'block_id'.")
+    trial_id = trial.get("trial_id")
+    if trial_id is None:
+        raise ValueError("'trial' must contain 'trial_id'.")
+
+    result = agent_blind.main(sub_id, block_id, trial_id, submission_id, slider_values)
+
+    return {
+        "rec": np.asarray(result["rec"], dtype=float).tolist(),
         "score": int(result["score"]),
         "rec_player_indices": np.asarray(result["rec_player_indices"], dtype=int).tolist(),
     }
@@ -163,9 +189,10 @@ def process_request(request: dict[str, Any]) -> dict[str, Any]:
             "type": "pong",
         }
 
-    if request_type != "run_trial":
+    if request_type not in {"run_trial", "run_trial_blind"}:
         raise ValueError(
-            "Unknown request type. Expected 'ping' or 'run_trial'."
+            "Unknown request type. Expected 'ping', 'run_trial', "
+            "or 'run_trial_blind'."
         )
 
     trial = request.get("trial")
@@ -182,7 +209,12 @@ def process_request(request: dict[str, Any]) -> dict[str, Any]:
     if submission_id is None:
         raise ValueError("'request' must contain 'submission_id'.")
 
-    result = run_trial_computation(
+    computation = (
+        run_trial_blind_computation
+        if request_type == "run_trial_blind"
+        else run_trial_computation
+    )
+    result = computation(
         trial=trial,
         submission_id=submission_id,
         slider_values=slider_values,

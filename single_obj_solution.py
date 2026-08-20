@@ -11,8 +11,8 @@ import pandas as pd
 from scipy.optimize import Bounds, LinearConstraint, milp
 
 
-DEFAULT_DATA = Path(__file__).parent / "data/items/block_1_trial_1_2016.csv"
-DEFAULT_OUTPUT = Path(__file__).parent / "block_1_trial_1_2016_single_solution.csv"
+DATA_DIR = Path(__file__).parent / "data/game_data"
+TRIALS_PER_BLOCK = {1: 6, 2: 13, 3: 5}
 SALARY_CAPS = {
     2000: 34.000, 2001: 35.500, 2002: 42.500, 2003: 40.271,
     2004: 43.870, 2005: 43.870, 2006: 49.500, 2007: 53.135,
@@ -22,6 +22,25 @@ SALARY_CAPS = {
     2020: 109.140, 2021: 109.140, 2022: 112.414, 2023: 123.655,
     2024: 136.021, 2025: 140.588, 2026: 154.647,
 }
+
+
+def find_trial_files() -> list[Path]:
+    """Find each source CSV by looping over its block and trial number."""
+    csv_paths = []
+    for block, trial_count in TRIALS_PER_BLOCK.items():
+        for trial in range(1, trial_count + 1):
+            pattern = f"block_{block}_trial_{trial}_*.csv"
+            matches = [
+                path
+                for path in DATA_DIR.glob(pattern)
+                if not path.stem.endswith("_single_solution")
+            ]
+            if len(matches) != 1:
+                raise FileNotFoundError(
+                    f"Expected one source file matching {pattern}, found {len(matches)}"
+                )
+            csv_paths.append(matches[0])
+    return csv_paths
 
 
 def infer_salary_cap(csv_path: Path) -> float:
@@ -143,11 +162,10 @@ def parse_args() -> argparse.Namespace:
         description="Solve one salary-constrained 0-1 knapsack per objective."
     )
     parser.add_argument(
-        "csv_path",
-        nargs="?",
+        "csv_paths",
+        nargs="*",
         type=Path,
-        default=DEFAULT_DATA,
-        help=f"input CSV (default: {DEFAULT_DATA})",
+        help="input CSVs (default: all block/trial files in data/game_data)",
     )
     parser.add_argument(
         "--salary-cap",
@@ -155,38 +173,32 @@ def parse_args() -> argparse.Namespace:
         help="salary cap; by default it is inferred from the filename's year",
     )
     parser.add_argument(
-        "--output",
+        "--output-dir",
         type=Path,
-        default=DEFAULT_OUTPUT,
-        help=f"output CSV (default: {DEFAULT_OUTPUT})",
+        help="output directory (default: beside each input CSV)",
     )
     return parser.parse_args()
 
 
 def main() -> None:
     args = parse_args()
-    salary_cap = (
-        args.salary_cap
-        if args.salary_cap is not None
-        else infer_salary_cap(args.csv_path)
-    )
-    if salary_cap < 0:
+    if args.salary_cap is not None and args.salary_cap < 0:
         raise ValueError("The salary cap must be nonnegative.")
 
-    solutions = solve_all_objectives(args.csv_path, salary_cap)
-    save_results(solutions, args.output)
-    print(f"Input: {args.csv_path}")
-    print(f"Salary cap: {salary_cap:.3f}")
+    csv_paths = args.csv_paths or find_trial_files()
+    for csv_path in csv_paths:
+        salary_cap = (
+            args.salary_cap
+            if args.salary_cap is not None
+            else infer_salary_cap(csv_path)
+        )
+        output_dir = args.output_dir or csv_path.parent
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f"{csv_path.stem}_single_solution.csv"
 
-    for objective, extremes in solutions.items():
-        for label, (selected, objective_total, salary_total) in extremes.items():
-            print(f"\n=== {label.title()} {objective} ===")
-            print(selected.to_string(index=False))
-            print(f"Players selected: {len(selected)}")
-            print(f"Total {objective}: {objective_total:.6f}")
-            print(f"Total SALARY: {salary_total:.3f} / {salary_cap:.3f}")
-
-    print(f"\nResults saved to: {args.output}")
+        solutions = solve_all_objectives(csv_path, salary_cap)
+        save_results(solutions, output_path)
+        print(f"Saved {output_path}")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ OBJ_COLORS = {
     "BLK": "#B279A2",   # purple
     "3P": "#FF9DA6",   # pink
     "G": "#9D755D",   # brown
+    "FG%": "#2CB1BC",  # teal
 }
 
 

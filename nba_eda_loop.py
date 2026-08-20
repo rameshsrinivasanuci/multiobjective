@@ -36,15 +36,13 @@ def main():
     
     # DATA_DIR = "../nba_fantasy/"
     DATA_DIR = "nba_data/"
-    YEAR = 2016                   
-    FILE = f"nba_fantasy_{YEAR}.csv"
-    OUTPUT_DIR = "eda_results/5_obj_0.05/"
+    OUTPUT_DIR = "eda_results/"
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     # Your stat columns, in the FIXED display order you want (keep this order
     # stable across runs so matrices are comparable year to year).
     #   'G' = games played
-    STAT_COLUMNS = ["PTS", "TRB", "STL","BLK", "FG%"]
+    STAT_COLUMNS = ["PTS", "TRB", "AST", "STL", "BLK", "3P", "G"]
 
     # Of the stat columns above, which are per-game counting stats that should
     # be put on a per-36-minute basis:  stat_per36 = stat_per_game / MP * 36
@@ -67,90 +65,68 @@ def main():
     }
 
 
-    # Read data
-    df = pd.read_csv(DATA_DIR + FILE)
-    df[RESCALE] = df[RESCALE].mul(PER_MINUTES).div(df[MINUTES_COL], axis=0)
-    df[["PLAYER"] + STAT_COLUMNS + [SALARY_SRC]].to_csv(
-        OUTPUT_DIR + f"items_{YEAR}.csv", index=False
-    )
-    items = df[STAT_COLUMNS + [SALARY_SRC]].to_numpy()
-
     # Set parameters
     n_selected = 10
     n_obj = len(STAT_COLUMNS)
     n_con = 1
-    capacity = SALARY_CAP[YEAR]
     pop_size = 1_000
     generations = 150 
     max_no_improve_gen = 3
-    max_row_diff = 0.05 # fraction of the number of Pareto front (depends on number of objectives)
+    max_row_diff = 0.1  # fraction of the number of Pareto front (depends on number of objectives)
     seed = 1123
 
-    # ---------- Run unbiased EDA -----------
-    eda_run = eda.KnapsackEDA(
-        items=items,
-        capacity=capacity,
-        n_selected=n_selected,
-        n_obj=n_obj,
-        pop_size=pop_size,
-        generations=generations,
-        max_no_improve_gen=max_no_improve_gen,
-        max_row_diff=max_row_diff,
-        seed=seed,
-    )
-    # ---------------- End ---------------------
+    for year in range(2000, 2017):
+        print(f"\nRunning unbiased EDA for {year}")
+        file = f"nba_fantasy_{year}.csv"
 
+        # Read data
+        df = pd.read_csv(os.path.join(DATA_DIR, file))
+        df[RESCALE] = df[RESCALE].mul(PER_MINUTES).div(df[MINUTES_COL], axis=0)
+        items = df[STAT_COLUMNS + [SALARY_SRC]].to_numpy()
+        capacity = SALARY_CAP[year]
 
-    # ----------- Run biased EDA -----------
-    # aspi = ask_for_aspiration(items, STAT_COLUMNS, n_selected)
-    # print("Aspiration:", aspi)
-    # temp = 0.1
-    # eda_run = eda_distance.KnapsackEDA(
-    #     items=items,
-    #     capacity=capacity,
-    #     n_selected=n_selected,
-    #     n_obj=n_obj,
-    #     pop_size=pop_size,
-    #     generations=generations,
-    #     max_no_improve_gen=max_no_improve_gen,
-    #     max_row_diff=max_row_diff,
-    #     seed=seed,
-    #     aspi=aspi,
-    #     if_rank=True,
-    #     temp=temp
-    # )
-    # ---------------- End ---------------------
+        # Run unbiased EDA
+        eda_run = eda.KnapsackEDA(
+            items=items,
+            capacity=capacity,
+            n_selected=n_selected,
+            n_obj=n_obj,
+            pop_size=pop_size,
+            generations=generations,
+            max_no_improve_gen=max_no_improve_gen,
+            max_row_diff=max_row_diff,
+            seed=seed+year,
+        )
+        results = eda_run.run()
 
+        # Save all results
+        results_path = os.path.join(OUTPUT_DIR, f"results_{year}.csv")
+        if os.path.exists(results_path):
+            raise ValueError(f"File {results_path} already exists")
+        with open(results_path, "wb") as f:
+            pickle.dump(results, f)
 
-    results = eda_run.run()
+        # Save Pareto-front results
+        pf = results["converged_pf_table"][-1]
+        pf_indices = results["converged_pf_population_table"][-1]
+        pf_df = pd.DataFrame(pf, columns=STAT_COLUMNS)
+        pf_indices_df = pd.DataFrame(pf_indices)
 
-    # save all results
-    results_path = OUTPUT_DIR + f"results_{YEAR}.pkl"
+        output_file_pf = os.path.join(OUTPUT_DIR, f"pf_{year}.csv")
+        output_file_pf_indices = os.path.join(
+            OUTPUT_DIR, f"pf_indices_{year}.pkl"
+        )
 
-    if os.path.exists(results_path):
-        raise ValueError(f"File {results_path} already exists")
-    with open(results_path, "wb") as f:
-        pickle.dump(results, f)   
+        if os.path.exists(output_file_pf):
+            print(f"File {output_file_pf} already exists")
+        else:
+            pf_df.to_csv(output_file_pf, index=False)
+            print(f"Saved {pf.shape[0]} solutions for {year}")
 
-    # Save pf results
-    pf = results["converged_pf_table"][-1]
-    pf_indices = results["converged_pf_population_table"][-1]
-    pf_df = pd.DataFrame(pf, columns=STAT_COLUMNS)
-    pf_indices_df = pd.DataFrame(pf_indices)
-    
-    output_file_pf = OUTPUT_DIR + f"pf_{YEAR}.csv"
-    output_file_pf_indices = OUTPUT_DIR + f"pf_indices_{YEAR}.csv"
-
-    if os.path.exists(output_file_pf):
-        print(f"File {output_file_pf} already exists")
-    else:
-        pf_df.to_csv(output_file_pf, index=False)
-        print(f"Saved {pf.shape[0]} solutions")
-
-    if os.path.exists(output_file_pf_indices):
-        print(f"File {output_file_pf_indices} already exists")
-    else:
-        pf_indices_df.to_csv(output_file_pf_indices, index=False)
+        if os.path.exists(output_file_pf_indices):
+            print(f"File {output_file_pf_indices} already exists")
+        else:
+            pf_indices_df.to_csv(output_file_pf_indices, index=False)
 
 
 if __name__ == "__main__":

@@ -39,7 +39,11 @@ SALARY_CAP = {
 #     return df.drop(columns=["PLAYER"], errors="ignore").to_numpy(float)
 
 def get_items(block_id, trial_id):
-    matches = list(Path("data/items").glob(f"block_{block_id}_trial_{trial_id}_*.csv"))
+    matches = list(
+        Path("data/game_data").glob(
+            f"block_{block_id}_trial_{trial_id}_[0-9][0-9][0-9][0-9].csv"
+        )
+    )
     if len(matches) != 1:
         raise ValueError(f"Expected one file for trial {trial_id}, found {len(matches)}")
     csv_path = matches[0]
