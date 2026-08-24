@@ -54,6 +54,21 @@ def get_items(block_id, trial_id):
     return items, year, obj_names
 
 
+def get_unbiased_pf(block_id: int, trial_id: int):
+    data_dir = Path("data/game_data")
+    pf_files = list(data_dir.glob(
+        f"pf_block_{block_id}_trial_{trial_id}_*.csv"
+    ))
+    indices_files = list(data_dir.glob(
+        f"pf_indices_block_{block_id}_trial_{trial_id}_*.csv"
+    ))
+    if len(pf_files) != 1 or len(indices_files) != 1:
+        raise ValueError(
+            f"Expected one file pair for block {block_id}, trial {trial_id}"
+        )
+    return pd.read_csv(pf_files[0]), pd.read_csv(indices_files[0])
+
+
 def get_aspi(slider_values):
     """Convert client slider values into an aspiration vector."""
     return np.asarray(slider_values, dtype=float)
@@ -207,7 +222,9 @@ def main(
 
 
     # --- compute game score ---
-    game_score = compute_game_score(query_pt, pf)
+    unbiased_pf, unbiased_idx = get_unbiased_pf(block_id, trial_id)
+    unbiased_pf, _ = density_filter(unbiased_pf, density_threshold)
+    game_score = compute_game_score(query_pt, unbiased_pf)
 
 
     return {

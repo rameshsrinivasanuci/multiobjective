@@ -10,7 +10,7 @@ from matplotlib.patches import Patch
 OBJ_COLORS = {
     "PTS": "#4C78A8",   # blue
     "AST": "#F58518",   # orange
-    "TRB": "#54A24B",   # green
+    "REB": "#54A24B",   # green
     "STL": "#E45756",   # red
     "BLK": "#B279A2",   # purple
     "3P": "#FF9DA6",   # pink
@@ -27,15 +27,19 @@ def _safe_iqr(data):
 
 def density_filter(pf, threshold, n_neighbors=10):
     """Keep the densest `threshold` fraction of PF points (IQR-normalized NN)."""
-    iqr = _safe_iqr(pf)
-    pf_norm = pf / iqr
+    is_dataframe = isinstance(pf, pd.DataFrame)
+    values = pf.to_numpy(dtype=float) if is_dataframe else np.asarray(pf, dtype=float)
+    
+    iqr = _safe_iqr(values)
+    pf_norm = values / iqr
     k = min(n_neighbors + 1, pf_norm.shape[0])
     nbrs = NearestNeighbors(n_neighbors=k).fit(pf_norm)
     dist_nbrs, _ = nbrs.kneighbors(pf_norm)
     sparse_score = dist_nbrs[:, 1:].mean(axis=1)
     cutoff = np.quantile(sparse_score, threshold)
     kept_idx = np.flatnonzero(sparse_score <= cutoff)
-    return pf[kept_idx], kept_idx
+    filtered_pf = pf.iloc[kept_idx].reset_index(drop=True) if is_dataframe else values[kept_idx]
+    return filtered_pf, kept_idx
 
 
 def pf_to_csv(pf, output_dir, obj_names):
