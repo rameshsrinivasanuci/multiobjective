@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 import numpy as np
@@ -12,7 +13,7 @@ from scipy.optimize import Bounds, LinearConstraint, milp
 
 
 DATA_DIR = Path(__file__).parent / "data/game_data"
-TRIALS_PER_BLOCK = {1: 6, 2: 13, 3: 5}
+BLOCK_2_PATTERN = re.compile(r"^block_2_trial_(\d+)_\d+\.csv$")
 SALARY_CAPS = {
     2000: 34.000, 2001: 35.500, 2002: 42.500, 2003: 40.271,
     2004: 43.870, 2005: 43.870, 2006: 49.500, 2007: 53.135,
@@ -25,22 +26,18 @@ SALARY_CAPS = {
 
 
 def find_trial_files() -> list[Path]:
-    """Find each source CSV by looping over its block and trial number."""
-    csv_paths = []
-    for block, trial_count in TRIALS_PER_BLOCK.items():
-        for trial in range(1, trial_count + 1):
-            pattern = f"block_{block}_trial_{trial}_*.csv"
-            matches = [
-                path
-                for path in DATA_DIR.glob(pattern)
-                if not path.stem.endswith("_single_solution")
-            ]
-            if len(matches) != 1:
-                raise FileNotFoundError(
-                    f"Expected one source file matching {pattern}, found {len(matches)}"
-                )
-            csv_paths.append(matches[0])
-    return csv_paths
+    """Find all block 2 source CSVs, ordered by trial number."""
+    csv_paths = [
+        path
+        for path in DATA_DIR.glob("block_2_trial_*.csv")
+        if BLOCK_2_PATTERN.fullmatch(path.name)
+    ]
+    if not csv_paths:
+        raise FileNotFoundError(f"No block 2 trial files found in {DATA_DIR}")
+    return sorted(
+        csv_paths,
+        key=lambda path: int(BLOCK_2_PATTERN.fullmatch(path.name).group(1)),
+    )
 
 
 def infer_salary_cap(csv_path: Path) -> float:
@@ -165,7 +162,7 @@ def parse_args() -> argparse.Namespace:
         "csv_paths",
         nargs="*",
         type=Path,
-        help="input CSVs (default: all block/trial files in data/game_data)",
+        help="input CSVs (default: all block_2_trial_* files in data/game_data)",
     )
     parser.add_argument(
         "--salary-cap",
