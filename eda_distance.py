@@ -488,7 +488,7 @@ class KnapsackEDA:
                 
             if prev_js_div is not None:
                 diff = prev_js_div - js_div
-                if np.abs(diff) > 0.0001:
+                if np.abs(diff) > 0.0003:
                     no_improve_gen = 0
                 else:
                     no_improve_gen += 1
