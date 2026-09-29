@@ -8,7 +8,7 @@ from numba import jit, prange
 
 def get_objectives(problem, population):
     """Evaluate given population."""
-    return problem.evaluate(population)
+    return -problem.evaluate(population)
 
 
 # new non dominated sort algorithm compatible with numba
@@ -298,7 +298,7 @@ class ContEDA:
         selected_objectives = objectives[select_indices]
         
         mu_updated, cov_updated = fit_multivariate_normal(selected_population)
-        js_div = js_divergence_mvn(self.mu, self.cov, mu_updated, cov_updated, self.rng)
+        js_div = js_divergence_mvn(self.mu, self.cov, mu_updated, cov_updated, n=10_000, rng=self.rng)
         
         return mu_updated, cov_updated, selected_population, selected_objectives, pareto_set, js_div
 
@@ -319,7 +319,7 @@ class ContEDA:
         selected_objectives = objectives[nd_idx]
 
         mu_updated, cov_updated = fit_multivariate_normal(selected_population)
-        js_div = js_divergence_mvn(self.mu, self.cov, mu_updated, cov_updated)
+        js_div = js_divergence_mvn(self.mu, self.cov, mu_updated, cov_updated, n=10_000, rng=self.rng)
         
         return mu_updated, cov_updated, selected_population, selected_objectives, pareto_set, js_div # js_div
     
@@ -356,7 +356,7 @@ class ContEDA:
             self.mu_table.append(self.mu.copy())
             self.cov_table.append(self.cov.copy())
             self.pareto_set_table.append(pareto_set.copy())
-            self.pareto_front_table.append(pareto_front.copy())
+            self.pareto_front_table.append(-pareto_front.copy()) # only negates the copy but not actual pareto_front
             self.js_div_list.append(js_div)
                 
             if prev_js_div is not None:
@@ -385,7 +385,7 @@ class ContEDA:
             self.mu_table.append(self.mu.copy())
             self.cov_table.append(self.cov.copy())
             self.pareto_set_table.append(pareto_set.copy())
-            self.pareto_front_table.append(pareto_front.copy())
+            self.pareto_front_table.append(-pareto_front.copy())
             self.js_div_list.append(js_div)
 
             front_0, unique_idx = np.unique(self.selected_objectives, axis=0, return_index=True)
@@ -398,7 +398,7 @@ class ContEDA:
             else:
                 no_improve_gen = 0
             
-            self.converged_pf_table.append(front_0.copy())
+            self.converged_pf_table.append(-front_0.copy())
             self.converged_ps_table.append(set_0.copy())
             prev_front_0 = front_0
         
