@@ -1,9 +1,10 @@
 import time
 import numpy as np
 from numpy import random
-from scipy.stats import multivariate_normal
+from scipy.stats import beta, norm, multivariate_normal
 from scipy.spatial.distance import jensenshannon
 from numba import jit, prange
+from multitools import make_pos_def
 
 
 def get_objectives(problem, population):
@@ -131,51 +132,177 @@ def initial_sample_population(n_var, xl, xu, pop_size, rng):
     return population
 
 
-def sample_population(mu, cov, pop_size, xl, xu, rng):
-    population = []
+# ------- MVN as probabilistic model -------
+# def fit_multivariate_normal(population):
+#     """Build multivariate normal distribution to population."""
+#     mu = population.mean(axis=0)
+#     cov = np.cov(
+#         population,
+#         rowvar=False,
+#         bias=True
+#     )
+#     return mu, cov
 
-    while len(population) < pop_size:
-        n_needed = pop_size - len(population)
-        samples = rng.multivariate_normal(
-            mu, cov,
-            size=n_needed * 2
+# def sample_population(mu, cov, pop_size, xl, xu, rng):
+#     population = []
+
+#     while len(population) < pop_size:
+#         n_needed = pop_size - len(population)
+#         samples = rng.multivariate_normal(
+#             mu, cov,
+#             size=n_needed * 2
+#         )
+#         mask = np.all(
+#             (samples >= xl) & (samples <= xu),
+#             axis=1
+#         )
+#         population.extend(samples[mask])
+
+#     return np.asarray(population[:pop_size])
+
+# def js_divergence_mvn(mu, cov, mu_updated, cov_updated, n=10_000, rng=None):
+#     """Calculate Jensen-Shannon divergence between two multivariate normal distributions."""
+#     p = multivariate_normal(mu, cov, allow_singular=True)
+#     q = multivariate_normal(mu_updated, cov_updated, allow_singular=True)
+
+#     x = rng.multivariate_normal(mu, cov, size=n)
+#     y = rng.multivariate_normal(mu_updated, cov_updated, size=n)
+
+#     # log_m_x = np.log(p.pdf(x) + q.pdf(x)) - np.log(2) # literal version that may cause underflow to 0
+#     # log_m_y = np.log(p.pdf(y) + q.pdf(y)) - np.log(2)
+#     log_m_x = np.logaddexp(p.logpdf(x), q.logpdf(x)) - np.log(2)
+#     log_m_y = np.logaddexp(p.logpdf(y), q.logpdf(y)) - np.log(2)
+#     js = 0.5 * np.mean(p.logpdf(x) - log_m_x) + 0.5 * np.mean(q.logpdf(y) - log_m_y)
+#     return js
+# -------------------------------------------
+
+
+# ------- Beta-GC as probabilistic model -------
+def fit_beta_GC(population, eps=1e-10):
+    """Fit Gaussian copula with Beta marginals."""
+
+    X = np.asarray(population, dtype=float)
+    n, d = X.shape
+
+    beta_params = np.zeros((d, 2))
+    U = np.zeros((n, d))
+    X = np.clip(X, eps, 1 - eps) # avoid exact 0 or 1 when fitting Beta distributions
+
+    for j in range(d):
+        a, b, _, _ = beta.fit(
+            X[:, j],
+            floc=0,
+            fscale=1,
+            method="MM"
         )
-        mask = np.all(
-            (samples >= xl) & (samples <= xu),
-            axis=1
+        beta_params[j] = [a, b]
+
+        U[:, j] = beta.cdf(
+            X[:, j],
+            a,
+            b,
+            loc=0,
+            scale=1
         )
-        population.extend(samples[mask])
 
-    return np.asarray(population[:pop_size])
-
-
-def fit_multivariate_normal(population):
-    """Build multivariate normal distribution to population."""
-    mu = population.mean(axis=0)
-    cov = np.cov(
-        population,
-        rowvar=False,
-        bias=True
-    )
-    return mu, cov
-
-
-def js_divergence_mvn(mu, cov, mu_updated, cov_updated, n=10_000, rng=None):
-    """Calculate Jensen-Shannon divergence between two multivariate normal distributions."""
-    p = multivariate_normal(mu, cov, allow_singular=True)
-    q = multivariate_normal(mu_updated, cov_updated, allow_singular=True)
-
-    x = rng.multivariate_normal(mu, cov, size=n)
-    y = rng.multivariate_normal(mu_updated, cov_updated, size=n)
-
-    # log_m_x = np.log(p.pdf(x) + q.pdf(x)) - np.log(2) # literal version that may cause underflow to 0
-    # log_m_y = np.log(p.pdf(y) + q.pdf(y)) - np.log(2)
-    log_m_x = np.logaddexp(p.logpdf(x), q.logpdf(x)) - np.log(2)
-    log_m_y = np.logaddexp(p.logpdf(y), q.logpdf(y)) - np.log(2)
-    js = 0.5 * np.mean(p.logpdf(x) - log_m_x) + 0.5 * np.mean(q.logpdf(y) - log_m_y)
-    return js
+    U = np.clip(U, eps, 1 - eps)
+    Z = norm.ppf(U)
+    R = np.corrcoef(Z, rowvar=False)
     
+    parameters = {
+        'beta_params': beta_params,
+        'R': R,
+    }
+    return parameters
 
+def sample_population(parameters, pop_size, rng, eps=1e-10):
+    """Sample population from Gaussian corpula model with beta marginals."""
+    R = make_pos_def(parameters['R'])
+    d = R.shape[0]
+    
+    Z = rng.multivariate_normal(
+        mean=np.zeros(d), 
+        cov=R, 
+        size=pop_size)
+
+    U = norm.cdf(Z)
+    U = np.clip(U, eps, 1 - eps)
+
+    X = np.zeros((pop_size, d))
+    for j, (a, b) in enumerate(parameters['beta_params']):
+        X[:, j] = beta.ppf(
+            U[:, j], 
+            a, 
+            b,
+            loc=0,
+            scale=1
+        )
+    
+    return X
+
+def logpdf_beta_GC(X, parameters, eps=1e-10):
+    """Calculate log probability density function of Beta-GC distribution."""
+
+    X = np.asarray(X)
+    beta_params = parameters["beta_params"]
+    R = make_pos_def(parameters["R"])
+    n, d = X.shape
+    X = np.clip(X, eps, 1 - eps)
+
+    U = np.zeros_like(X)
+    log_marginals = np.zeros(n)
+    for j, (a, b) in enumerate(beta_params):
+        U[:, j] = beta.cdf(
+            X[:, j],
+            a,
+            b,
+            loc=0,
+            scale=1
+        )
+
+        log_marginals += beta.logpdf(
+            X[:, j],
+            a,
+            b,
+            loc=0,
+            scale=1
+        )
+    
+    U = np.clip(U, eps, 1 - eps)
+    Z = norm.ppf(U)
+    R_inv = np.linalg.inv(R)
+    sign, log_det_R = np.linalg.slogdet(R) # np.linalg.slogdet computes sign of determinant and natural log of absolute determinant
+    if sign <= 0:
+        raise ValueError("R must be positive definite.")
+    A = R_inv - np.eye(d)
+    quadratic = np.einsum(
+        "ni,ij,nj->n",
+        Z,
+        A,
+        Z
+    )
+    log_copula = - 0.5 * log_det_R - 0.5 * quadratic
+
+    return log_copula + log_marginals
+
+def JSD(parameters, updated_parameters, rng, n=10_000, eps=1e-10):
+    """Calculate Jensen-Shannon divergence between two Beta-GC distributions."""
+    x = sample_population(parameters, n, rng)
+    y = sample_population(updated_parameters, n, rng)
+
+    # evaluate densities at samples from p
+    log_p_x = logpdf_beta_GC(x, parameters, eps=eps)
+    log_q_x = logpdf_beta_GC(x, updated_parameters, eps=eps)
+
+    # evaluate densities at samples from q
+    log_p_y = logpdf_beta_GC(y, parameters, eps=eps)
+    log_q_y = logpdf_beta_GC(y, updated_parameters, eps=eps)
+
+    log_m_x = np.logaddexp(log_p_x, log_q_x) - np.log(2)
+    log_m_y = np.logaddexp(log_p_y, log_q_y) - np.log(2)
+    js = 0.5 * np.mean(log_p_x - log_m_x) + 0.5 * np.mean(log_q_y - log_m_y)
+    return js
+# -------------------------------------------
 
 class ContEDA:
     """
@@ -230,13 +357,11 @@ class ContEDA:
         self.max_row_diff = max_row_diff
         self.rng = random.default_rng(seed=seed)
         
-        self.mu = None
-        self.cov = None
+        self.params = None
         self.selected_population = None
         self.selected_objectives = None
         
-        self.mu_table = []
-        self.cov_table = []
+        self.params_table = []
         self.pareto_set_table = []
         self.pareto_front_table = []
         self.js_div_list = []
@@ -264,14 +389,14 @@ class ContEDA:
         selected_population = population[select_indices]
         selected_objectives = objectives[select_indices]
         
-        mu, cov = fit_multivariate_normal(selected_population)
+        params = fit_beta_GC(selected_population)
         
-        return mu, cov, selected_population, selected_objectives
+        return params, selected_population, selected_objectives
     
     def _update_distribution(self):
         """Update distribution and select new population."""
         population = sample_population(
-            self.mu, self.cov, self.pop_size, self.xl, self.xu, self.rng
+            self.params, self.pop_size, self.rng, eps=1e-10
         )
         objectives = get_objectives(self.problem, population)
         
@@ -297,15 +422,15 @@ class ContEDA:
         selected_population = population[select_indices]
         selected_objectives = objectives[select_indices]
         
-        mu_updated, cov_updated = fit_multivariate_normal(selected_population)
-        js_div = js_divergence_mvn(self.mu, self.cov, mu_updated, cov_updated, n=10_000, rng=self.rng)
+        params_updated = fit_beta_GC(selected_population)
+        js_div = JSD(self.params, params_updated, self.rng, n=5_000, eps=1e-10)
         
-        return mu_updated, cov_updated, selected_population, selected_objectives, pareto_set, js_div
+        return params_updated, selected_population, selected_objectives, pareto_set, js_div
 
     def _converged_pf(self):
         """Find the converged Pareto Front using non-dominated, still updating distribution."""
         population = sample_population(
-            self.mu, self.cov, self.pop_size, self.xl, self.xu, self.rng
+            self.params, self.pop_size, self.rng, eps=1e-10
         )
         objectives = get_objectives(self.problem, population)
 
@@ -318,10 +443,10 @@ class ContEDA:
         selected_population = population[nd_idx]
         selected_objectives = objectives[nd_idx]
 
-        mu_updated, cov_updated = fit_multivariate_normal(selected_population)
-        js_div = js_divergence_mvn(self.mu, self.cov, mu_updated, cov_updated, n=10_000, rng=self.rng)
+        params_updated = fit_beta_GC(selected_population)
+        js_div = JSD(self.params, params_updated, self.rng, n=5_000, eps=1e-10)
         
-        return mu_updated, cov_updated, selected_population, selected_objectives, pareto_set, js_div # js_div
+        return params_updated, selected_population, selected_objectives, pareto_set, js_div
     
     def run(self):
         """
@@ -337,7 +462,7 @@ class ContEDA:
         """
         t0 = time.perf_counter()
         # Initialize
-        self.mu, self.cov, self.selected_population, self.selected_objectives = \
+        self.params, self.selected_population, self.selected_objectives = \
             self._generate_initial_population()
         
         # Mode 1: run until distribution converges
@@ -348,13 +473,12 @@ class ContEDA:
                and no_improve_gen < self.max_no_improve_gen):
             generation += 1
             print(f"Mode 1 generation {generation} (no improve count: {no_improve_gen})")
-            self.mu, self.cov, self.selected_population, self.selected_objectives, \
+            self.params, self.selected_population, self.selected_objectives, \
                 pareto_set, js_div = self._update_distribution()
 
             pareto_front = get_objectives(self.problem, pareto_set)
                 
-            self.mu_table.append(self.mu.copy())
-            self.cov_table.append(self.cov.copy())
+            self.params_table.append(self.params.copy())
             self.pareto_set_table.append(pareto_set.copy())
             self.pareto_front_table.append(-pareto_front.copy()) # only negates the copy but not actual pareto_front
             self.js_div_list.append(js_div)
@@ -377,13 +501,12 @@ class ContEDA:
                and no_improve_gen < self.max_no_improve_gen):
             counter += 1
             print(f"Mode 2 generation {counter} (no improve count: {no_improve_gen})")
-            self.mu, self.cov, self.selected_population, self.selected_objectives, \
+            self.params, self.selected_population, self.selected_objectives, \
                 pareto_set, js_div = self._converged_pf()
 
             pareto_front = get_objectives(self.problem, pareto_set)
             
-            self.mu_table.append(self.mu.copy())
-            self.cov_table.append(self.cov.copy())
+            self.params_table.append(self.params.copy())
             self.pareto_set_table.append(pareto_set.copy())
             self.pareto_front_table.append(-pareto_front.copy())
             self.js_div_list.append(js_div)
@@ -407,8 +530,7 @@ class ContEDA:
               f"(mode 1: {generation} gens, mode 2: {counter} gens)")
 
         return {
-            'mu_table': self.mu_table,
-            'cov_table': self.cov_table,
+            'params_table': self.params_table,
             'pareto_set_table': self.pareto_set_table,
             'pareto_front_table': self.pareto_front_table,
             'js_div_list': self.js_div_list,
