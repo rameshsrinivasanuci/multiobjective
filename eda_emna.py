@@ -178,6 +178,21 @@ def initial_sample_population(n_var, xl, xu, pop_size, rng):
 
 
 # ------- Beta-GC as probabilistic model -------
+def beta_mom(x):
+    x = np.asarray(x, dtype=float)
+
+    m1 = np.mean(x)          # E[X]
+    m2 = np.mean(x**2)       # E[X^2]
+
+    denom = m2 - m1**2
+    t = (m1 - m2) / denom   # alpha + beta
+
+    alpha = m1 * t
+    beta = (1 - m1) * t
+
+    return alpha, beta
+
+
 def fit_beta_GC(population, eps=1e-10):
     """Fit Gaussian copula with Beta marginals."""
 
@@ -189,12 +204,13 @@ def fit_beta_GC(population, eps=1e-10):
     X = np.clip(X, eps, 1 - eps) # avoid exact 0 or 1 when fitting Beta distributions
 
     for j in range(d):
-        a, b, _, _ = beta.fit(
-            X[:, j],
-            floc=0,
-            fscale=1,
-            method="MM"
-        )
+        # a, b, _, _ = beta.fit(
+        #     X[:, j],
+        #     floc=0,
+        #     fscale=1,
+        #     method="MM"
+        # )
+        a, b = beta_mom(X[:, j])
         beta_params[j] = [a, b]
 
         U[:, j] = beta.cdf(
@@ -485,7 +501,7 @@ class ContEDA:
                 
             if prev_js_div is not None:
                 diff = prev_js_div - js_div
-                if np.abs(diff) > 0.0001:
+                if np.abs(diff) > 0.001: # default 0.0001
                     no_improve_gen = 0
                 else:
                     no_improve_gen += 1
