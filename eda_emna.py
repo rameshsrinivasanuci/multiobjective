@@ -412,7 +412,8 @@ def sample_population(parameters, pop_size, rng, eps=1e-10):
             scale=scale
         )
     
-    X = np.exp(-Y)
+    # X = np.exp(-Y)
+    X = np.clip(np.exp(-Y), eps, 1 - eps)
     
     return X
 
@@ -598,6 +599,7 @@ class ContEDA:
         selected_population = population[select_indices]
         selected_objectives = objectives[select_indices]
         
+        self.last_selected_population = selected_population # for debugging
         params_updated = fit_UIG_GC(selected_population)
         js_div = JSD(self.params, params_updated, self.rng, n=5_000, eps=1e-10)
         
