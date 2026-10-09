@@ -1,7 +1,7 @@
 import time
 import numpy as np
 from numpy import random
-from scipy.stats import beta, norm, multivariate_normal
+from scipy.stats import beta, norm, multivariate_normal, invgauss
 from scipy.spatial.distance import jensenshannon
 from numba import jit, prange
 from multitools import make_pos_def
@@ -122,13 +122,19 @@ def row_diff(A, B):
     return len(A_set.symmetric_difference(B_set))
 
 
-def initial_sample_population(n_var, xl, xu, pop_size, rng):
+def initial_sample_population(n_var, xl, xu, pop_size, rng, eps=1e-10):
     """
     Sample initial population from uniform distribution.
     """
-    population = np.zeros((pop_size, n_var), dtype=np.float64)
-    for i in range(pop_size):
-        population[i, :] = rng.uniform(xl, xu, n_var)
+    # population = np.zeros((pop_size, n_var), dtype=np.float64)
+    # for i in range(pop_size):
+    #     population[i, :] = rng.uniform(xl, xu, n_var)
+    
+    population = rng.uniform(
+        xl + eps,
+        xu - eps,
+        size=(pop_size, n_var)
+    )
     return population
 
 
@@ -178,47 +184,200 @@ def initial_sample_population(n_var, xl, xu, pop_size, rng):
 
 
 # ------- Beta-GC as probabilistic model -------
-def beta_mom(x):
-    x = np.asarray(x, dtype=float)
+# def beta_mom(x):
+#     x = np.asarray(x, dtype=float)
 
-    m1 = np.mean(x)          # E[X]
-    m2 = np.mean(x**2)       # E[X^2]
+#     m1 = np.mean(x)          # E[X]
+#     m2 = np.mean(x**2)       # E[X^2]
 
-    denom = m2 - m1**2
-    t = (m1 - m2) / denom   # alpha + beta
+#     denom = m2 - m1**2
+#     t = (m1 - m2) / denom   # alpha + beta
 
-    alpha = m1 * t
-    beta = (1 - m1) * t
+#     alpha = m1 * t
+#     beta = (1 - m1) * t
 
-    return alpha, beta
+#     return alpha, beta
 
 
-def fit_beta_GC(population, eps=1e-10):
+# def fit_beta_GC(population, eps=1e-10):
+#     """Fit Gaussian copula with Beta marginals."""
+
+#     X = np.asarray(population, dtype=float)
+#     n, d = X.shape
+
+#     beta_params = np.zeros((d, 2))
+#     U = np.zeros((n, d))
+#     X = np.clip(X, eps, 1 - eps) # avoid exact 0 or 1 when fitting Beta distributions
+
+#     for j in range(d):
+#         # a, b, _, _ = beta.fit(
+#         #     X[:, j],
+#         #     floc=0,
+#         #     fscale=1,
+#         #     method="MM"
+#         # )
+#         a, b = beta_mom(X[:, j])
+#         beta_params[j] = [a, b]
+
+#         U[:, j] = beta.cdf(
+#             X[:, j],
+#             a,
+#             b,
+#             loc=0,
+#             scale=1
+#         )
+
+#     U = np.clip(U, eps, 1 - eps)
+#     Z = norm.ppf(U)
+#     R = np.corrcoef(Z, rowvar=False)
+    
+#     parameters = {
+#         'beta_params': beta_params,
+#         'R': R,
+#     }
+#     return parameters
+
+# def sample_population(parameters, pop_size, rng, eps=1e-10):
+#     """Sample population from Gaussian corpula model with beta marginals."""
+#     R = make_pos_def(parameters['R'])
+#     d = R.shape[0]
+    
+#     Z = rng.multivariate_normal(
+#         mean=np.zeros(d), 
+#         cov=R, 
+#         size=pop_size)
+
+#     U = norm.cdf(Z)
+#     U = np.clip(U, eps, 1 - eps)
+
+#     X = np.zeros((pop_size, d))
+#     for j, (a, b) in enumerate(parameters['beta_params']):
+#         X[:, j] = beta.ppf(
+#             U[:, j], 
+#             a, 
+#             b,
+#             loc=0,
+#             scale=1
+#         )
+    
+#     return X
+
+# def sample_population_rand(parameters, pop_size, xl, xu, rng, eps=1e-10):
+#     """Sample population from Gaussian corpula model with beta marginals."""
+#     pop_size_1 = int(pop_size*0.5)
+#     pop_size_2 = int(pop_size*0.5)
+#     R = make_pos_def(parameters['R'])
+#     d = R.shape[0]
+    
+#     Z = rng.multivariate_normal(
+#         mean=np.zeros(d), 
+#         cov=R, 
+#         size=pop_size_1)
+
+#     U = norm.cdf(Z)
+#     U = np.clip(U, eps, 1 - eps)
+
+#     X1 = np.zeros((pop_size_1, d))
+#     for j, (a, b) in enumerate(parameters['beta_params']):
+#         X1[:, j] = beta.ppf(
+#             U[:, j], 
+#             a, 
+#             b,
+#             loc=0,
+#             scale=1
+#         )
+
+#     X2 = rng.uniform(xl, xu, size=(pop_size_2, d))
+#     X = np.vstack((X1, X2))
+#     rng.shuffle(X, axis=0)
+    
+#     return X
+
+# def logpdf_beta_GC(X, parameters, eps=1e-10):
+#     """Calculate log probability density function of Beta-GC distribution."""
+
+#     X = np.asarray(X)
+#     beta_params = parameters["beta_params"]
+#     R = make_pos_def(parameters["R"])
+#     n, d = X.shape
+#     X = np.clip(X, eps, 1 - eps)
+
+#     U = np.zeros_like(X)
+#     log_marginals = np.zeros(n)
+#     for j, (a, b) in enumerate(beta_params):
+#         U[:, j] = beta.cdf(
+#             X[:, j],
+#             a,
+#             b,
+#             loc=0,
+#             scale=1
+#         )
+
+#         log_marginals += beta.logpdf(
+#             X[:, j],
+#             a,
+#             b,
+#             loc=0,
+#             scale=1
+#         )
+    
+#     U = np.clip(U, eps, 1 - eps)
+#     Z = norm.ppf(U)
+#     R_inv = np.linalg.inv(R)
+#     sign, log_det_R = np.linalg.slogdet(R) # np.linalg.slogdet computes sign of determinant and natural log of absolute determinant
+#     if sign <= 0:
+#         raise ValueError("R must be positive definite.")
+#     A = R_inv - np.eye(d)
+#     quadratic = np.einsum(
+#         "ni,ij,nj->n",
+#         Z,
+#         A,
+#         Z
+#     )
+#     log_copula = - 0.5 * log_det_R - 0.5 * quadratic
+
+#     return log_copula + log_marginals
+
+# def JSD(parameters, updated_parameters, rng, n=10_000, eps=1e-10):
+#     """Calculate Jensen-Shannon divergence between two Beta-GC distributions."""
+#     x = sample_population(parameters, n, rng)
+#     y = sample_population(updated_parameters, n, rng)
+
+#     # evaluate densities at samples from p
+#     log_p_x = logpdf_beta_GC(x, parameters, eps=eps)
+#     log_q_x = logpdf_beta_GC(x, updated_parameters, eps=eps)
+
+#     # evaluate densities at samples from q
+#     log_p_y = logpdf_beta_GC(y, parameters, eps=eps)
+#     log_q_y = logpdf_beta_GC(y, updated_parameters, eps=eps)
+
+#     log_m_x = np.logaddexp(log_p_x, log_q_x) - np.log(2)
+#     log_m_y = np.logaddexp(log_p_y, log_q_y) - np.log(2)
+#     js = 0.5 * np.mean(log_p_x - log_m_x) + 0.5 * np.mean(log_q_y - log_m_y)
+#     return js
+# -------------------------------------------
+
+
+# ------- UIG as probabilistic model -------
+def fit_UIG_GC(population, eps=1e-10):
     """Fit Gaussian copula with Beta marginals."""
 
     X = np.asarray(population, dtype=float)
-    n, d = X.shape
+    Y = -np.log(X)
+    n, d = Y.shape
 
-    beta_params = np.zeros((d, 2))
+    params = np.zeros((d, 2))
     U = np.zeros((n, d))
-    X = np.clip(X, eps, 1 - eps) # avoid exact 0 or 1 when fitting Beta distributions
 
     for j in range(d):
-        # a, b, _, _ = beta.fit(
-        #     X[:, j],
-        #     floc=0,
-        #     fscale=1,
-        #     method="MM"
-        # )
-        a, b = beta_mom(X[:, j])
-        beta_params[j] = [a, b]
+        mu, loc, scale = invgauss.fit(Y[:, j], floc=0)
+        params[j] = [mu, scale]
 
-        U[:, j] = beta.cdf(
-            X[:, j],
-            a,
-            b,
+        U[:, j] = invgauss.cdf(
+            Y[:, j],
+            mu,
             loc=0,
-            scale=1
+            scale=scale
         )
 
     U = np.clip(U, eps, 1 - eps)
@@ -226,13 +385,13 @@ def fit_beta_GC(population, eps=1e-10):
     R = np.corrcoef(Z, rowvar=False)
     
     parameters = {
-        'beta_params': beta_params,
+        'params': params,
         'R': R,
     }
     return parameters
 
 def sample_population(parameters, pop_size, rng, eps=1e-10):
-    """Sample population from Gaussian corpula model with beta marginals."""
+    """Sample population from Gaussian corpula model with UIG marginals."""
     R = make_pos_def(parameters['R'])
     d = R.shape[0]
     
@@ -244,44 +403,43 @@ def sample_population(parameters, pop_size, rng, eps=1e-10):
     U = norm.cdf(Z)
     U = np.clip(U, eps, 1 - eps)
 
-    X = np.zeros((pop_size, d))
-    for j, (a, b) in enumerate(parameters['beta_params']):
-        X[:, j] = beta.ppf(
+    Y = np.zeros((pop_size, d))
+    for j, (mu, scale) in enumerate(parameters['params']):
+        Y[:, j] = invgauss.ppf(
             U[:, j], 
-            a, 
-            b,
+            mu,
             loc=0,
-            scale=1
+            scale=scale
         )
+    
+    X = np.exp(-Y)
     
     return X
 
-def logpdf_beta_GC(X, parameters, eps=1e-10):
-    """Calculate log probability density function of Beta-GC distribution."""
+def logpdf_IG_GC(X, parameters, eps=1e-10):
+    """Calculate log probability density function of UIG-GC distribution."""
 
     X = np.asarray(X)
-    beta_params = parameters["beta_params"]
+    params = parameters["params"]
     R = make_pos_def(parameters["R"])
-    n, d = X.shape
-    X = np.clip(X, eps, 1 - eps)
+    Y = -np.log(X)
+    n, d = Y.shape
 
-    U = np.zeros_like(X)
+    U = np.zeros_like(Y)
     log_marginals = np.zeros(n)
-    for j, (a, b) in enumerate(beta_params):
-        U[:, j] = beta.cdf(
-            X[:, j],
-            a,
-            b,
+    for j, (mu, scale) in enumerate(params):
+        U[:, j] = invgauss.cdf(
+            Y[:, j],
+            mu,
             loc=0,
-            scale=1
+            scale=scale
         )
 
-        log_marginals += beta.logpdf(
-            X[:, j],
-            a,
-            b,
+        log_marginals += invgauss.logpdf(
+            Y[:, j],
+            mu,
             loc=0,
-            scale=1
+            scale=scale
         )
     
     U = np.clip(U, eps, 1 - eps)
@@ -301,23 +459,25 @@ def logpdf_beta_GC(X, parameters, eps=1e-10):
 
     return log_copula + log_marginals
 
+
 def JSD(parameters, updated_parameters, rng, n=10_000, eps=1e-10):
     """Calculate Jensen-Shannon divergence between two Beta-GC distributions."""
     x = sample_population(parameters, n, rng)
     y = sample_population(updated_parameters, n, rng)
 
     # evaluate densities at samples from p
-    log_p_x = logpdf_beta_GC(x, parameters, eps=eps)
-    log_q_x = logpdf_beta_GC(x, updated_parameters, eps=eps)
+    log_p_x = logpdf_IG_GC(x, parameters, eps=eps)
+    log_q_x = logpdf_IG_GC(x, updated_parameters, eps=eps)
 
     # evaluate densities at samples from q
-    log_p_y = logpdf_beta_GC(y, parameters, eps=eps)
-    log_q_y = logpdf_beta_GC(y, updated_parameters, eps=eps)
+    log_p_y = logpdf_IG_GC(y, parameters, eps=eps)
+    log_q_y = logpdf_IG_GC(y, updated_parameters, eps=eps)
 
     log_m_x = np.logaddexp(log_p_x, log_q_x) - np.log(2)
     log_m_y = np.logaddexp(log_p_y, log_q_y) - np.log(2)
     js = 0.5 * np.mean(log_p_x - log_m_x) + 0.5 * np.mean(log_q_y - log_m_y)
     return js
+
 # -------------------------------------------
 
 class ContEDA:
@@ -405,7 +565,7 @@ class ContEDA:
         selected_population = population[select_indices]
         selected_objectives = objectives[select_indices]
         
-        params = fit_beta_GC(selected_population)
+        params = fit_UIG_GC(selected_population)
         
         return params, selected_population, selected_objectives
     
@@ -438,7 +598,7 @@ class ContEDA:
         selected_population = population[select_indices]
         selected_objectives = objectives[select_indices]
         
-        params_updated = fit_beta_GC(selected_population)
+        params_updated = fit_UIG_GC(selected_population)
         js_div = JSD(self.params, params_updated, self.rng, n=5_000, eps=1e-10)
         
         return params_updated, selected_population, selected_objectives, pareto_set, js_div
@@ -459,7 +619,7 @@ class ContEDA:
         selected_population = population[nd_idx]
         selected_objectives = objectives[nd_idx]
 
-        params_updated = fit_beta_GC(selected_population)
+        params_updated = fit_UIG_GC(selected_population)
         js_div = JSD(self.params, params_updated, self.rng, n=5_000, eps=1e-10)
         
         return params_updated, selected_population, selected_objectives, pareto_set, js_div
