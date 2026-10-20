@@ -40,7 +40,7 @@ SALARY_CAP = {
 
 def get_items(block_id, trial_id):
     matches = list(
-        Path("data/game_data").glob(
+        Path("nba_game/data/game_data").glob(
             f"block_{block_id}_trial_{trial_id}_[0-9][0-9][0-9][0-9].csv"
         )
     )
@@ -55,7 +55,7 @@ def get_items(block_id, trial_id):
 
 
 def get_unbiased_pf(block_id: int, trial_id: int):
-    data_dir = Path("data/game_data")
+    data_dir = Path("nba_game/data/game_data")
     pf_files = list(data_dir.glob(
         f"pf_block_{block_id}_trial_{trial_id}_*.csv"
     ))
