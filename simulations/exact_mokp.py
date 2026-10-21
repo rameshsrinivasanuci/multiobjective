@@ -94,20 +94,26 @@ def exact_pareto_knapsack(values, costs, budget, n_selected, exactly=True):
 
 if __name__ == "__main__":
     
-    n_obj = 5
+    n_obj = 3
     n_items = 20
     n_selected = 5
-    rho = 0.2
+    rho = 0.3
+    exactly = False
+
     data = np.load(f'problems/items_{n_obj}obj_{n_items}items_{rho}rho_allneg.npz')
     values = data['items'][:, :n_obj]
     costs = data['items'][:, n_obj]
     budget = data['capacity']
     print(f"Capacity: {budget}")
 
-    X, F, C = exact_pareto_knapsack(values, costs, budget, n_selected)
+    X, F, C = exact_pareto_knapsack(values, costs, budget, n_selected, exactly=exactly)
     print(f"Found {len(F)} Pareto-optimal selections")
     for i, (x, f, cost) in enumerate(zip(X, F, C), start=1):
         selected_items = np.flatnonzero(x).tolist()  # 0-based item IDs
         print(f"{i:2d}. Items: {selected_items}; cost: {cost:g}; objectives: {f.tolist()}")
 
-    np.savez(f"results/exact_front_{n_obj}obj_{n_items}items_{rho}rho_allneg.npz", X=X, F=F, C=C)
+    if exactly:
+        folder = "exact"
+    else:
+        folder = "upper_bound"
+    np.savez(f"results/{folder}/exact_front_{n_obj}obj_{n_items}items_{rho}rho_allneg.npz", X=X, F=F, C=C)
