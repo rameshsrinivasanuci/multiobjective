@@ -93,20 +93,7 @@ def exact_pareto_knapsack(values, costs, budget, n_selected, exactly=True):
 
 
 if __name__ == "__main__":
-    # Rows = items; columns = objectives (all to maximize).
-    # values = np.array([
-    #     [9, 1, 2],
-    #     [3, 7, 4],
-    #     [6, 3, 6],
-    #     [2, 8, 3],
-    #     [8, 2, 7],
-    #     [4, 6, 5],
-    #     [5, 5, 2],
-    #     [1, 4, 9],
-    # ])
-    # costs = np.array([5, 4, 6, 3, 7, 5, 4, 6])
-    # budget = 15
-    # n_selected = 3
+    
     n_obj = 5
     n_items = 20
     n_selected = 5
@@ -123,5 +110,4 @@ if __name__ == "__main__":
         selected_items = np.flatnonzero(x).tolist()  # 0-based item IDs
         print(f"{i:2d}. Items: {selected_items}; cost: {cost:g}; objectives: {f.tolist()}")
 
-    # Compare with an approximate algorithm's nondominated objective vectors:
     np.savez(f"results/exact_front_{n_obj}obj_{n_items}items_{rho}rho_allneg.npz", X=X, F=F, C=C)
