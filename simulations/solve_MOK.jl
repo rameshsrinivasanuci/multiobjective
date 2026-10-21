@@ -3,7 +3,7 @@ using NPZ
 import HiGHS
 import MultiObjectiveAlgorithms as MOA
 
-n_obj = 3
+n_obj = 2
 n_items = 20
 n_selected = 5
 rho = 0.3
@@ -14,7 +14,7 @@ N = size(items, 1)
 
 obj1 = items[:, 1]
 obj2 = items[:, 2]
-obj3 = items[:, 3]
+# obj3 = items[:, 3]
 cost = items[:, n_obj + 1]
 
 model = Model(() -> MOA.Optimizer(HiGHS.Optimizer))
@@ -26,8 +26,8 @@ set_silent(model)
 @constraint(model, sum(x) <= n_selected)
 @expression(model, obj1_expr, sum(obj1[i] * x[i] for i in 1:N))
 @expression(model, obj2_expr, sum(obj2[i] * x[i] for i in 1:N))
-@expression(model, obj3_expr, sum(obj3[i] * x[i] for i in 1:N))
-@objective(model, Max, [obj1_expr, obj2_expr, obj3_expr])
+# @expression(model, obj3_expr, sum(obj3[i] * x[i] for i in 1:N))
+@objective(model, Max, [obj1_expr, obj2_expr])
 
 
 optimize!(model)

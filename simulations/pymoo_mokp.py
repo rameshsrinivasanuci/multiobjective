@@ -23,6 +23,7 @@ from pymoo.operators.mutation.bitflip import BitflipMutation
 from pymoo.operators.sampling.rnd import BinaryRandomSampling
 from pymoo.optimize import minimize
 from pymoo.util.ref_dirs import get_reference_directions
+from pymoo.util.nds.non_dominated_sorting import NonDominatedSorting
 
 
 class MultiobjectiveKnapsack(ElementwiseProblem):
@@ -121,15 +122,49 @@ def solve_mokp(values, costs, budget, n_selected, *, algorithm="nsga2",
     res = minimize(problem, optimizer, ("n_gen", n_gen), seed=seed, verbose=verbose)
     n_eval = int(res.algorithm.evaluator.n_eval)
 
-    # pymoo already returns the feasible nondominated set in res.X / res.F.
-    # No manual population filtering or nondominated sorting is necessary.
-    if res.X is None:
+    # # pymoo already returns the feasible nondominated set in res.X / res.F.
+    # # No manual population filtering or nondominated sorting is necessary.
+    # if res.X is None:
+    #     X = np.empty((0, problem.n_var), dtype=np.int8)
+    #     F = np.empty((0, problem.n_obj), dtype=float)
+    #     C = np.empty(0, dtype=float)
+    # else:
+    #     X = np.atleast_2d(np.asarray(res.X, dtype=np.int8))
+    #     F = -np.atleast_2d(np.asarray(res.F, dtype=float))
+    #     C = X @ problem.costs
+
+
+    # Extract the final population, not only pymoo's reported optimum.
+    X_all = np.asarray(res.pop.get("X"), dtype=np.int8)
+
+    # Explicit feasibility filtering.
+    C_all = X_all @ problem.costs
+    counts = X_all.sum(axis=1)
+
+    feasible = C_all <= problem.budget + 1e-9
+
+    if exactly:
+        feasible &= counts == problem.n_selected
+    else:
+        feasible &= counts <= problem.n_selected
+
+    X = np.unique(X_all[feasible], axis=0)
+
+    if len(X) == 0:
         X = np.empty((0, problem.n_var), dtype=np.int8)
         F = np.empty((0, problem.n_obj), dtype=float)
         C = np.empty(0, dtype=float)
     else:
-        X = np.atleast_2d(np.asarray(res.X, dtype=np.int8))
-        F = -np.atleast_2d(np.asarray(res.F, dtype=float))
+        # Original maximization objectives.
+        F = X.astype(float) @ problem.values
+
+        # Non-dominated solutions for maximization.
+        nd = NonDominatedSorting().do(
+            -F, only_non_dominated_front=True
+        )
+
+        X = X[nd]
+        F = F[nd]
         C = X @ problem.costs
 
     return X, F, C, n_eval
