@@ -17,6 +17,8 @@ import numpy as np
 from pymoo.algorithms.moo.nsga2 import NSGA2
 from pymoo.algorithms.moo.nsga3 import NSGA3
 from pymoo.algorithms.moo.spea2 import SPEA2
+from pymoo.algorithms.moo.rnsga2 import RNSGA2
+from pymoo.algorithms.moo.rnsga3 import RNSGA3
 from pymoo.core.problem import ElementwiseProblem
 from pymoo.operators.crossover.pntx import TwoPointCrossover
 from pymoo.operators.mutation.bitflip import BitflipMutation
@@ -80,7 +82,7 @@ class MultiobjectiveKnapsack(ElementwiseProblem):
             ])
 
 
-def make_algorithm(name, n_obj, pop_size, seed):
+def make_algorithm(name, n_obj, pop_size, seed, aspiration=None):
     """Use the same binary variation operators for all three methods."""
     common = dict(
         sampling=BinaryRandomSampling(),
@@ -103,12 +105,52 @@ def make_algorithm(name, n_obj, pop_size, seed):
             # Works for arbitrary pop_size; may be slower for large pop_size.
             ref_dirs = get_reference_directions("energy", n_obj, pop_size, seed=seed)
         return NSGA3(pop_size=pop_size, ref_dirs=ref_dirs, **common)
+    if name == "rnsga2":
+        if aspiration is None:
+            raise ValueError("RNSGA2 requires an aspiration point")
+
+        aspiration = np.asarray(aspiration, dtype=float)
+
+        if aspiration.shape != (n_obj,):
+            raise ValueError(
+                f"aspiration must have shape ({n_obj},)"
+            )
+
+        ref_points = -aspiration.reshape(1, -1)
+
+        return RNSGA2(
+            ref_points=ref_points,
+            pop_size=pop_size,
+            epsilon=0.01,
+            normalization="front",
+            extreme_points_as_reference_points=False,
+            **common
+        )
+    if name == "rnsga3":
+        if aspiration is None:
+            raise ValueError("RNSGA3 requires an aspiration point")
+
+        aspiration = np.asarray(aspiration, dtype=float)
+
+        if aspiration.shape != (n_obj,):
+            raise ValueError(
+                f"aspiration must have shape ({n_obj},)"
+            )
+
+        ref_points = -aspiration.reshape(1, -1)
+
+        return RNSGA3(
+            ref_points=ref_points,
+            pop_per_ref_point=1287,  # need to be adjusted
+            mu=0.05,
+            **common
+        )
 
     raise ValueError("algorithm must be 'nsga2', 'nsga3', or 'spea2'")
 
 
 def solve_mokp(values, costs, budget, n_selected, *, algorithm="nsga2",
-               exactly=True, pop_size=120, n_gen=200, seed=1, verbose=False):
+               exactly=True, pop_size=120, n_gen=200, seed=1, verbose=False, aspiration=None,):
     """Return X, F, C, n_eval for the feasible approximate Pareto front.
 
     X has shape (n_found, n_items), F has (n_found, n_obj), and C has
@@ -118,7 +160,7 @@ def solve_mokp(values, costs, budget, n_selected, *, algorithm="nsga2",
         raise ValueError("pop_size must be >= 4 and n_gen must be >= 1")
 
     problem = MultiobjectiveKnapsack(values, costs, budget, n_selected, exactly)
-    optimizer = make_algorithm(algorithm, problem.n_obj, pop_size, seed)
+    optimizer = make_algorithm(algorithm, problem.n_obj, pop_size, seed, aspiration=aspiration)
     res = minimize(problem, optimizer, ("n_gen", n_gen), seed=seed, verbose=verbose)
     n_eval = int(res.algorithm.evaluator.n_eval)
 
@@ -172,11 +214,12 @@ def solve_mokp(values, costs, budget, n_selected, *, algorithm="nsga2",
 
 if __name__ == "__main__":
     # Problem configuration
-    n_obj = 3
-    n_items = 20
-    n_selected = 5
-    rho = 0.3
-    exactly = False
+    n_obj = 9
+    n_items = 100
+    n_selected = 25
+    rho = 0.11
+    exactly = True
+    aspiration = np.array([11464,  9592, 10612,  7193,  8549, 10415, 11176, 10386, 12909])
 
     # Load the instance (columns: objective values, followed by item cost).
     input_file = f"problems/items_{n_obj}obj_{n_items}items_{rho}rho_allneg.npz"
@@ -187,14 +230,16 @@ if __name__ == "__main__":
     print(f"Capacity: {budget:g}")
 
     # Algorithm configuration
-    algorithms = ["nsga2", "nsga3", "spea2"]
+    # algorithms = ["nsga2", "nsga3", "spea2"]
+    algorithms = ["rnsga3"]
     pop_size = 1000
     n_gen = 200
     seed = 1123
 
     # Separate output directories for equality and upper-bound formulations.
     folder = "exact" if exactly else "upper_bound"
-    output_dir = Path("results") / folder
+    sub_folder = "prefer" if aspiration is not None else "no_prefer"
+    output_dir = Path("results") / folder / sub_folder
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for name in algorithms:
@@ -202,6 +247,7 @@ if __name__ == "__main__":
             values, costs, budget, n_selected,
             algorithm=name, exactly=exactly,
             pop_size=pop_size, n_gen=n_gen, seed=seed,
+            aspiration=aspiration,
         )
 
         print(f"\n{name.upper()}: {len(X)} feasible nondominated selections; "
