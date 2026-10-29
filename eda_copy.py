@@ -385,74 +385,74 @@ class KnapsackEDA:
         self.distribution, self.selected_population, self.selected_objectives = \
             self._generate_initial_population()
         
-        # Mode 1: run until distribution converges
-        no_improve_gen = 0
-        prev_js_div = None
-        generation = 0
-        while (generation < self.generations
-               and no_improve_gen < self.max_no_improve_gen):
-            generation += 1
-            print(f"Mode 1 generation {generation} (no improve count: {no_improve_gen})")
-            self.distribution, self.selected_population, self.selected_objectives, \
-                pareto_indices, js_div = self._update_distribution()
-
-            pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
-            for k in range(pareto_indices.shape[0]):
-                pareto_front[k, :] = np.sum(self.items[pareto_indices[k, :], :], axis=0)
-                
-            self.distribution_table.append(self.distribution.copy())
-            self.pareto_indices_table.append(pareto_indices.copy())
-            self.pareto_front_table.append(pareto_front.copy())
-            self.js_div_list.append(js_div)
-                
-            if prev_js_div is not None:
-                diff = prev_js_div - js_div
-                if np.abs(diff) > 0.0001:
-                    no_improve_gen = 0
-                else:
-                    no_improve_gen += 1
-            else:
-                no_improve_gen = 0
-            prev_js_div = js_div
-
-        # Mode 2: run until Pareto Front converges
+        # # Mode 1: run until distribution converges
         # no_improve_gen = 0
-        # counter = 0 
-        # prev_front_0 = None
-        # while (counter < self.generations
+        # prev_js_div = None
+        # generation = 0
+        # while (generation < self.generations
         #        and no_improve_gen < self.max_no_improve_gen):
-        #     counter += 1
-        #     print(f"Mode 2 generation {counter} (no improve count: {no_improve_gen})")
+        #     generation += 1
+        #     print(f"Mode 1 generation {generation} (no improve count: {no_improve_gen})")
         #     self.distribution, self.selected_population, self.selected_objectives, \
-        #         pareto_indices, js_div = self._converged_pf()
+        #         pareto_indices, js_div = self._update_distribution()
 
         #     pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
         #     for k in range(pareto_indices.shape[0]):
         #         pareto_front[k, :] = np.sum(self.items[pareto_indices[k, :], :], axis=0)
-            
+                
         #     self.distribution_table.append(self.distribution.copy())
         #     self.pareto_indices_table.append(pareto_indices.copy())
         #     self.pareto_front_table.append(pareto_front.copy())
         #     self.js_div_list.append(js_div)
-
-        #     front_0, unique_idx = np.unique(self.selected_objectives, axis=0, return_index=True)
-        #     front_0_population = self.selected_population[unique_idx]
-        #     if prev_front_0 is not None:
-        #         if row_diff(prev_front_0, front_0) <= self.max_row_diff * len(prev_front_0):
-        #             no_improve_gen += 1
-        #         else:
+                
+        #     if prev_js_div is not None:
+        #         diff = prev_js_div - js_div
+        #         if np.abs(diff) > 0.0001:
         #             no_improve_gen = 0
+        #         else:
+        #             no_improve_gen += 1
         #     else:
         #         no_improve_gen = 0
+        #     prev_js_div = js_div
+
+        # Mode 2: run until Pareto Front converges
+        no_improve_gen = 0
+        counter = 0 
+        prev_front_0 = None
+        while (counter < self.generations
+               and no_improve_gen < self.max_no_improve_gen):
+            counter += 1
+            print(f"Mode 2 generation {counter} (no improve count: {no_improve_gen})")
+            self.distribution, self.selected_population, self.selected_objectives, \
+                pareto_indices, js_div = self._converged_pf()
+
+            pareto_front = np.zeros((pareto_indices.shape[0], self.items.shape[1]))
+            for k in range(pareto_indices.shape[0]):
+                pareto_front[k, :] = np.sum(self.items[pareto_indices[k, :], :], axis=0)
             
-        #     self.converged_pf_table.append(front_0.copy())
-        #     self.converged_pf_population_table.append(front_0_population.copy())
-        #     prev_front_0 = front_0
+            self.distribution_table.append(self.distribution.copy())
+            self.pareto_indices_table.append(pareto_indices.copy())
+            self.pareto_front_table.append(pareto_front.copy())
+            self.js_div_list.append(js_div)
+
+            front_0, unique_idx = np.unique(self.selected_objectives, axis=0, return_index=True)
+            front_0_population = self.selected_population[unique_idx]
+            if prev_front_0 is not None:
+                if row_diff(prev_front_0, front_0) <= self.max_row_diff * len(prev_front_0):
+                    no_improve_gen += 1
+                else:
+                    no_improve_gen = 0
+            else:
+                no_improve_gen = 0
+            
+            self.converged_pf_table.append(front_0.copy())
+            self.converged_pf_population_table.append(front_0_population.copy())
+            prev_front_0 = front_0
         
         elapsed = time.perf_counter() - t0
         print(f"EDA finished in {elapsed:.2f}s "
             #   f"(mode 1: {generation} gens, mode 2: {counter} gens)")
-            f"(mode 1: {generation} gens)")
+            f"(mode 2: {counter} gens)")
 
         return {
             'distribution_table': self.distribution_table,
@@ -461,8 +461,8 @@ class KnapsackEDA:
             'js_div_list': self.js_div_list,
             'converged_pf_table': self.converged_pf_table,
             'converged_pf_population_table': self.converged_pf_population_table,
-            'mode 1 generations': generation,
-            # 'mode 2 generations': counter,
+            # 'mode 1 generations': generation,
+            'mode 2 generations': counter,
             'elapsed_sec': elapsed,
         }
 
