@@ -11,6 +11,7 @@ Algorithms: NSGA-II, NSGA-III, SPEA2. Uses pymoo's native constraint
 handling (no repair operators). Install: pip install 'pymoo>=0.6.2' numpy
 """
 
+import time
 from pathlib import Path
 
 import numpy as np
@@ -214,12 +215,13 @@ def solve_mokp(values, costs, budget, n_selected, *, algorithm="nsga2",
 
 if __name__ == "__main__":
     # Problem configuration
-    n_obj = 9
+    n_obj = 5
     n_items = 100
     n_selected = 25
-    rho = 0.11
+    rho = 0.2
     exactly = True
-    aspiration = np.array([11464,  9592, 10612,  7193,  8549, 10415, 11176, 10386, 12909])
+    aspiration = np.array([14582, 11126,  7081,  9801,  8849])
+    # aspiration = np.array([11464,  9592, 10612,  7193,  8549, 10415, 11176, 10386, 12909]) # 9 obj
 
     # Load the instance (columns: objective values, followed by item cost).
     input_file = f"problems/items_{n_obj}obj_{n_items}items_{rho}rho_allneg.npz"
@@ -231,7 +233,7 @@ if __name__ == "__main__":
 
     # Algorithm configuration
     # algorithms = ["nsga2", "nsga3", "spea2"]
-    algorithms = ["rnsga3"]
+    algorithms = ["rnsga2"]
     pop_size = 1000
     n_gen = 200
     seed = 1123
@@ -243,21 +245,23 @@ if __name__ == "__main__":
     output_dir.mkdir(parents=True, exist_ok=True)
 
     for name in algorithms:
+        t0 = time.perf_counter()
         X, F, C, n_eval = solve_mokp(
             values, costs, budget, n_selected,
             algorithm=name, exactly=exactly,
             pop_size=pop_size, n_gen=n_gen, seed=seed,
             aspiration=aspiration,
         )
+        elapsed = time.perf_counter() - t0
 
         print(f"\n{name.upper()}: {len(X)} feasible nondominated selections; "
-              f"evaluations: {n_eval}")
+              f"evaluations: {n_eval}; elapsed: {elapsed:.2f}s")
         for i, (x, f, cost) in enumerate(zip(X, F, C), start=1):
             print(f"{i:2d}. Items: {np.flatnonzero(x).tolist()}; "
                   f"cost: {cost:g}; objectives: {f.tolist()}")
 
-        filename = output_dir / f"{name}_{n_obj}obj_{n_items}items_{rho}rho_allneg.npz"
-        np.savez(filename, X=X, F=F, C=C, n_eval=n_eval)
+        filename = output_dir / f"{name}_{n_obj}obj_{n_items}items_{rho}rho_allneg_withtime.npz"
+        np.savez(filename, X=X, F=F, C=C, n_eval=n_eval, elapsed_sec=elapsed)
         print(f"Saved to: {filename}")
         if len(X) == 0:
             print("Warning: no feasible solution found; try more generations "
