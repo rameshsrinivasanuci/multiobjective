@@ -46,8 +46,9 @@ SETUP = {
     "n_selected": 25,
     "rho": 0.2,
     "exactly": True,
-    "aspiration": np.array([14582, 11126, 7081, 9801, 8849]),
+    "aspiration": np.array([13703., 10232., 11229.,  8183.,  9798.]),
     "obj_names": ["obj_1", "obj_2", "obj_3", "obj_4", "obj_5"],
+    "seed": 1500,
 }
 
 EDA_PARAMS = {
@@ -75,11 +76,11 @@ DENSITY_THRESHOLD = 0.8
 
 
 def problem_tag(setup):
-    return f"{setup['n_obj']}obj_{setup['n_items']}items_{setup['rho']}rho"
+    return f"{setup['n_obj']}obj_{setup['n_items']}items_{setup['rho']}rho_allneg_{setup['seed']}seed"
 
 
 def load_problem(setup):
-    data = np.load(DATA_DIR / "problems" / f"items_{problem_tag(setup)}_allneg.npz")
+    data = np.load(DATA_DIR / "problems" / f"items_{problem_tag(setup)}.npz")
     return data["items"], data["capacity"]
 
 
@@ -158,7 +159,7 @@ def choose_step(betas, radii_raw, obj_weight):
     change_i = int(np.argmax(betas_weighted))
     # inf radii (no curvature) would make the step infinite, so only finite radii count
     finite = radii_raw[change_i][np.isfinite(radii_raw[change_i])]
-    change = float(np.mean(finite)) if finite.size else np.nan
+    change = float(np.min(finite)) if finite.size else np.nan
     return betas_weighted, change_i, change
 
 
