@@ -46,9 +46,9 @@ SETUP = {
     "n_selected": 25,
     "rho": 0.2,
     "exactly": True,
-    "aspiration": np.array([13703., 10232., 11229.,  8183.,  9798.]),
+    "aspiration": np.array([12329.,  6994.,  9638., 10307., 13385.]),
     "obj_names": ["obj_1", "obj_2", "obj_3", "obj_4", "obj_5"],
-    "seed": 1500,
+    "seed": 1600,
 }
 
 EDA_PARAMS = {
