@@ -32,6 +32,13 @@ sys.path.insert(0, str(REPO_DIR))
 import mrs
 import eda_distance_copy
 
+# initial aspiration predefinedfor each problem (seed: aspiration)
+ASPI = {
+    1300: np.array([ 8856.,  9058., 10015., 11802., 14529.]),
+    1400: np.array([ 8137., 10991., 14076., 12892.,  7928.]),
+    1500: np.array([13703., 10232., 11229.,  8183.,  9798.]),
+    1600: np.array([12329.,  6994.,  9638., 10307., 13385.]),
+}
 
 # ---------------------------------------------------------------------------
 # CONFIG
@@ -46,9 +53,9 @@ SETUP = {
     "n_selected": 25,
     "rho": 0.2,
     "exactly": True,
-    "aspiration": np.array([12329.,  6994.,  9638., 10307., 13385.]),
+    "aspiration": ASPI[1500],
     "obj_names": ["obj_1", "obj_2", "obj_3", "obj_4", "obj_5"],
-    "seed": 1600,
+    "seed": 1500,
 }
 
 EDA_PARAMS = {
