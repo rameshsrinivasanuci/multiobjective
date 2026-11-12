@@ -22,7 +22,7 @@ EDA_PARAMS = {
     "generations": 150, ## changed from 200 to match agent.py
     "max_no_improve_gen": 3,
     "max_row_diff": 0.1,
-    "seed": 2+17,  ## change from 1123 to match agent.py
+    "seed": 4+16,  ## change from 1123 to match agent.py
     "if_rank": True,
     "temp": 0.1,
 }
@@ -138,9 +138,9 @@ def run_inner_loop(
         record["target"] = target
         record["new_query_idx"] = new_idx
         record["new_query_pt"] = new_pt
-        if new_idx in visited:
-            stop_reason = "cycle"
-            break
+        # if new_idx in visited:  # remove loop check to obtain a fixed number of rounds
+        #     stop_reason = "cycle"
+        #     break
         visited.add(new_idx)
         query_idx, query_pt = new_idx, new_pt
 
