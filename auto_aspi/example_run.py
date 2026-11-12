@@ -24,7 +24,7 @@ import agent
 
 def make_setup():
     block_id = 2
-    trial_id = 16
+    trial_id = 17
     _, _, obj_names = agent.get_items(block_id, trial_id)
 
     return {
@@ -33,7 +33,7 @@ def make_setup():
         "n_selected": 10,
         "n_obj": len(obj_names),
         "obj_names": obj_names,
-        "aspiration": np.array([109.88, 42.28, 15.98, 25.06, 186.81]),
+        "aspiration": np.array([120.8, 38.1, 21.1, 13.5, 211.4]),
     }
 
 

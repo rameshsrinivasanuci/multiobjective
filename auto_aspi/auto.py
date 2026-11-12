@@ -11,6 +11,7 @@ sys.path.insert(0, str(REPO_DIR))
 import mrs
 import agent
 import eda_distance_copy
+import eda_distance
 
 
 # ---------------------------------------------------------------------------
@@ -18,10 +19,10 @@ import eda_distance_copy
 # ---------------------------------------------------------------------------
 EDA_PARAMS = {
     "pop_size": 1000,
-    "generations": 200,
+    "generations": 150, ## changed from 200 to match agent.py
     "max_no_improve_gen": 3,
     "max_row_diff": 0.1,
-    "seed": 1123,
+    "seed": 2+17,  ## change from 1123 to match agent.py
     "if_rank": True,
     "temp": 0.1,
 }
@@ -151,22 +152,12 @@ def run_inner_loop(
 # ---------------------------------------------------------------------------
 # Outer-loop pieces
 # ---------------------------------------------------------------------------
-def obtain_front(aspiration, items, capacity, setup, cache_path, try_unbiased=True):
+def obtain_front(aspiration, items, capacity, setup, cache_path):
     """Return (pf_raw, ps_raw) for `aspiration`.
-    Optionally tries the unbiased front, then `cache_path`, and finally the EDA.
+    Tries `cache_path` first, and otherwise runs the EDA.
     """
     cache_path = Path(cache_path)
     cache_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if try_unbiased:
-        try:
-            pf, pf_indices = agent.get_unbiased_pf(
-                setup["block_id"], setup["trial_id"]
-            )
-            print("loaded unbiased front")
-            return pf.to_numpy(), pf_indices.to_numpy()
-        except Exception as exc:
-            print(f"could not load unbiased front ({exc})")
 
     if cache_path.exists():
         try:
@@ -181,7 +172,7 @@ def obtain_front(aspiration, items, capacity, setup, cache_path, try_unbiased=Tr
             print(f"could not load cached front ({exc})")
 
     print(f"running EDA with aspiration {np.round(aspiration, 1)}")
-    eda_run = eda_distance_copy.KnapsackEDA(
+    eda_run = eda_distance.KnapsackEDA(  ##changed from eda_distance_copy to eda_distance to match agent.py
         items=items,
         capacity=capacity,
         n_selected=setup["n_selected"],
@@ -234,7 +225,6 @@ def run_outer_loop(n_outer, run_dir, setup):
         pf_raw, _ = obtain_front(
             aspiration, items, capacity, setup,
             cache_path=outer_dir / "eda_results.pkl",
-            try_unbiased=(outer_i == 0),
         )
         pf, _, info = prepare_front(pf_raw, outer_dir, setup)
         obj_weight = compute_obj_weight(pf, aspiration)
