@@ -7,34 +7,25 @@ Run from the repository root:
 
 import argparse
 from pathlib import Path
-
 import numpy as np
 
-try:
-    from .auto import (
-        SALARY_CAP,
-        compute_obj_weight,
-        obtain_front,
-        prepare_front,
-        run_inner_loop,
-        run_outer_loop,
-    )
-except ImportError:
-    from auto import (
-        SALARY_CAP,
-        compute_obj_weight,
-        obtain_front,
-        prepare_front,
-        run_inner_loop,
-        run_outer_loop,
-    )
+
+from auto import (
+    SALARY_CAP,
+    compute_obj_weight,
+    obtain_front,
+    prepare_front,
+    run_inner_loop,
+    run_outer_loop,
+)
 import mrs
+import agent
 
 
 def make_setup():
     block_id = 2
-    trial_id = 1
-    _, _, obj_names = mrs.get_items(block_id, trial_id)
+    trial_id = 16
+    _, _, obj_names = agent.get_items(block_id, trial_id)
 
     return {
         "block_id": block_id,
@@ -42,15 +33,14 @@ def make_setup():
         "n_selected": 10,
         "n_obj": len(obj_names),
         "obj_names": obj_names,
-        # Must have one value per objective, in the same order as obj_names.
-        "aspiration": np.array([40.0, 25.0, 8.0, 5.0, 110.0]),
+        "aspiration": np.array([109.88, 42.28, 15.98, 25.06, 186.81]),
     }
 
 
 def run_inner_example(run_dir, setup, n_inner=5):
     """Run multiple inner steps on one fixed Pareto front."""
     run_dir.mkdir(parents=True, exist_ok=True)
-    items, year, _ = mrs.get_items(setup["block_id"], setup["trial_id"])
+    items, year, _ = agent.get_items(setup["block_id"], setup["trial_id"])
     aspiration = np.asarray(setup["aspiration"], dtype=float)
 
     pf_raw, _ = obtain_front(

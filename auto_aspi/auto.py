@@ -136,6 +136,7 @@ def run_inner_loop(
         new_idx, new_pt, target = moved
         record["target"] = target
         record["new_query_idx"] = new_idx
+        record["new_query_pt"] = new_pt
         if new_idx in visited:
             stop_reason = "cycle"
             break
@@ -218,7 +219,7 @@ def run_outer_loop(n_outer, run_dir, setup):
     run_dir = Path(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    items, year, _ = mrs.get_items(setup["block_id"], setup["trial_id"])
+    items, year, _ = agent.get_items(setup["block_id"], setup["trial_id"])
     capacity = SALARY_CAP[year]
     mrs_params = mrs.get_mrs_params()
     aspiration = np.asarray(setup["aspiration"], dtype=float)
