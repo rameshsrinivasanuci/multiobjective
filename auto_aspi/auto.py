@@ -22,7 +22,7 @@ EDA_PARAMS = {
     "generations": 150, ## changed from 200 to match agent.py
     "max_no_improve_gen": 3,
     "max_row_diff": 0.1,
-    "seed": 4+16,  ## change from 1123 to match agent.py
+    "seed": 2+17,  ## change from 1123 to match agent.py
     "if_rank": True,
     "temp": 0.1,
 }
@@ -85,7 +85,7 @@ def move_query(info, query_pt, betas_raw, obj_change_i, change):
     target = query_pt.copy()
     for j in range(len(query_pt)):
         if j != obj_change_i:
-            target[j] = query_pt[j] + betas_raw[obj_change_i, j] * change
+            target[j] = query_pt[j] + betas_raw[obj_change_i, j] * change ##CHECK
     target[obj_change_i] = query_pt[obj_change_i] + change
 
     candidates = np.flatnonzero(info["data"][:, obj_change_i] > query_pt[obj_change_i])
