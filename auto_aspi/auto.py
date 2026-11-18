@@ -4,6 +4,8 @@ import numpy as np
 import pickle
 
 from scipy.stats import percentileofscore
+from sklearn.neighbors import NearestNeighbors
+from sklearn.preprocessing import PolynomialFeatures
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_DIR = SCRIPT_DIR.parent
@@ -29,6 +31,18 @@ EDA_PARAMS = {
 
 DENSITY_THRESHOLD = 0.8
 
+# Round objective vectors when checking for outer-loop cycles.
+OUTER_CYCLE_ROUND = 1
+CYCLE_DAMP = 0.5
+
+# How choose_step turns the validity radii of the chosen objective into a step size:
+# "median", "weighted" (obj_weight-weighted average), "min" (most conservative), or
+# "absolute" (min over j of the step where the curvature error in o_j reaches ABS_TOL * IQR_j).
+RADIUS_AGG = "absolute"
+
+# Allowed curvature error for "absolute", as a fraction of each objective's IQR.
+ABS_TOL = 0.1
+
 SALARY_CAP = {
         2000: 34.000, 2001: 35.500, 2002: 42.500, 2003: 40.271,
         2004: 43.870, 2005: 43.870, 2006: 49.500, 2007: 53.135,
@@ -44,6 +58,12 @@ def save_records(records, output_path):
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with open(output_path, "wb") as f:
         pickle.dump(records, f)
+
+# round the point to the nearest OUTER_CYCLE_ROUND decimal place
+def point_key(pt, decimals=OUTER_CYCLE_ROUND):
+    """Hashable rounded vector for outer-loop cycle detection."""
+    return tuple(np.round(np.asarray(pt, dtype=float), decimals))
+
 
 # ---------------------------------------------------------------------------
 # Inner-loop pieces
@@ -68,14 +88,90 @@ def analyze_point(info, mrs_params, query_idx):
     )
     return betas_raw, betas, radii_raw, radii_pct
 
-def choose_step(betas, radii_raw, obj_weight):
-    """Obtain weighted mrs, which objective to change, and the smallest valid change size."""
+def compute_curvature(info, mrs_params, query_idx):
+    """Raw quadratic coefficient c[i, j] of o_i^2 when o_j is fit on the other objectives.
+
+    Same local fit as mrs.compute_validity_radii (k nearest neighbours, degree-2
+    polynomial). Units are o_j per (o_i)^2; the diagonal is NaN.
+    """
+    data, k, d, iqr = info["data"], mrs_params["k"], info["d"], info["iqr"]
+    poly = PolynomialFeatures(degree=2, include_bias=True)
+    nn = NearestNeighbors(n_neighbors=k + 1).fit(data / iqr)
+    _, nn_idx = nn.kneighbors((data[query_idx] / iqr).reshape(1, -1))
+    nbrs = data[nn_idx[0, 1:]] - data[query_idx]
+
+    curv = np.full((d, d), np.nan)
+    for j in range(d):
+        input_cols = [c for c in range(d) if c != j]
+        feat_names = [f"x{p}" for p in range(len(input_cols))]
+        X_poly = poly.fit_transform(nbrs[:, input_cols])
+        all_names = list(poly.get_feature_names_out(feat_names))
+        coef, _, _, _ = np.linalg.lstsq(X_poly, nbrs[:, j], rcond=None)
+        for pos, i in enumerate(input_cols):
+            curv[i, j] = coef[all_names.index(f"x{pos}^2")]
+    return curv
+
+def absolute_radii(curv_row, iqr, abs_tol):
+    """Step in o_i at which the curvature error |c_ij| * step^2 reaches abs_tol * IQR_j.
+
+    Returns sqrt(abs_tol * IQR_j / |c_ij|) per j; inf where there is no curvature,
+    NaN on the diagonal.
+    """
+    curv_row = np.asarray(curv_row, dtype=float)
+    radii = np.full(curv_row.shape, np.nan)
+    known = np.isfinite(curv_row)
+    flat = known & (np.abs(curv_row) < 1e-10)
+    curved = known & ~flat
+    radii[flat] = np.inf
+    radii[curved] = np.sqrt(abs_tol * iqr[curved] / np.abs(curv_row[curved]))
+    return radii
+
+def choose_step(betas, radii_raw, radii_pct, obj_weight, radius_agg=None,
+                curv=None, iqr=None, abs_tol=None):
+    """Obtain weighted mrs, which objective to change, and the change size.
+
+    The change size aggregates the validity radii of the chosen objective i over the
+    other objectives j (all radii in row i are in raw units of objective i):
+      "median":   median of the finite radii
+      "weighted": average of the finite radii, weighted by obj_weight[j]
+      "min":      smallest finite radius (most conservative; the original rule)
+      "absolute": smallest step at which the curvature error in any o_j reaches
+                  abs_tol * IQR_j (needs `curv` from compute_curvature and `iqr`)
+    """
+    radius_agg = radius_agg or RADIUS_AGG
     betas_weighted = betas @ obj_weight.T
     obj_change_i= int(np.argmax(betas_weighted))
-    finite_radii = radii_raw[obj_change_i][np.isfinite(radii_raw[obj_change_i])]
-    change = float(np.min(finite_radii)) if finite_radii.size else np.nan
-    return betas_weighted, obj_change_i, change
 
+    if radius_agg == "absolute":
+        if curv is None or iqr is None:
+            raise ValueError('radius_agg="absolute" needs curv and iqr')
+        abs_tol = ABS_TOL if abs_tol is None else abs_tol
+        abs_row = absolute_radii(curv[obj_change_i], np.asarray(iqr, dtype=float), abs_tol)
+        finite = abs_row[np.isfinite(abs_row)]
+        change = float(np.min(finite)) if finite.size else np.nan
+        return betas_weighted, obj_change_i, change
+
+    pct_row = radii_pct[obj_change_i]
+    raw_row = radii_raw[obj_change_i]
+    # skip the diagonal (NaN) and inf radii (no curvature)
+    valid = np.isfinite(pct_row) & np.isfinite(raw_row)
+    if not valid.any():
+        return betas_weighted, obj_change_i, np.nan
+    valid_idx = np.flatnonzero(valid)
+
+    if radius_agg == "median":
+        change = float(np.median(raw_row[valid_idx]))
+    elif radius_agg == "weighted":
+        w = np.asarray(obj_weight, dtype=float)[valid_idx]
+        if w.sum() > 0:
+            change = float(np.sum(w * raw_row[valid_idx]) / w.sum())
+        else:
+            change = float(np.mean(raw_row[valid_idx]))
+    elif radius_agg == "min":
+        change = float(raw_row[valid_idx[np.argmin(pct_row[valid_idx])]])
+    else:
+        raise ValueError(f"unknown radius_agg: {radius_agg}")
+    return betas_weighted, obj_change_i, change
 
 def move_query(info, query_pt, betas_raw, obj_change_i, change):
     """Find target point given betas and change. Then find the nearest point on the pareto front
@@ -101,8 +197,9 @@ def move_query(info, query_pt, betas_raw, obj_change_i, change):
 # ---------------------------------------------------------------------------
 
 def run_inner_loop(
-    info, mrs_params, aspiration, obj_weight, 
-    query_idx, query_pt, n_inner, run_dir, outer_i
+    info, mrs_params, aspiration, obj_weight,
+    query_idx, query_pt, n_inner, run_dir, outer_i,
+    change_scale=1.0,
 ):
     records = []
     visited = {query_idx}
@@ -110,7 +207,13 @@ def run_inner_loop(
 
     for inner_i in range(n_inner):
         betas_raw, betas, radii_raw, radii_pct = analyze_point(info, mrs_params, query_idx)
-        betas_weighted, obj_change_i, change = choose_step(betas, radii_raw, obj_weight)
+        curv = compute_curvature(info, mrs_params, query_idx) if RADIUS_AGG == "absolute" else None
+        betas_weighted, obj_change_i, change = choose_step(
+            betas, radii_raw, radii_pct, obj_weight, curv=curv, iqr=info["iqr"],
+        )
+        change_raw = change
+        if np.isfinite(change) and change_scale != 1.0:
+            change = float(change) * change_scale
 
         record = {
             "outer_step": outer_i,
@@ -122,13 +225,16 @@ def run_inner_loop(
             "betas_weighted": betas_weighted,
             "obj_to_change_idx": obj_change_i,
             "obj_to_change": info["obj_names"][obj_change_i],
+            "change_raw": change_raw,
             "change": change,
+            "change_scale": change_scale,
             "target": None,
             "new_query_idx": None,
         }
         records.append(record)
-        print(f"[outer step {outer_i} inner step {inner_i}] query={np.round(query_pt, 1)}"
-              f"improve {info['obj_names'][obj_change_i]} by {change:.2f}")
+        scale_note = f" (scale={change_scale})" if change_scale != 1.0 else ""
+        print(f"[outer step {outer_i} inner step {inner_i}] query={np.round(query_pt, 1)} "
+              f"improve {info['obj_names'][obj_change_i]} by {change:.2f}{scale_note}")
 
         moved = move_query(info, query_pt, betas_raw, obj_change_i, change)
         if moved is None:
@@ -217,10 +323,15 @@ def run_outer_loop(n_outer, run_dir, setup):
 
     all_records = []
     outer_summary = []
+    # Track visited aspirations (rounded). If a move lands on a seen point,
+    # damp the next outer step's change by CYCLE_DAMP instead of stopping.
+    visited = {point_key(aspiration)}
+    damp_next = False
+
     for outer_i in range(n_outer):
         print(f"=== outer step {outer_i}: aspiration {np.round(aspiration, 1)} ===")
         outer_dir = run_dir / f"outer_{outer_i:02d}"
-        outer_dir.mkdir(parents=True, exist_ok=True) 
+        outer_dir.mkdir(parents=True, exist_ok=True)
 
         pf_raw, _ = obtain_front(
             aspiration, items, capacity, setup,
@@ -230,21 +341,49 @@ def run_outer_loop(n_outer, run_dir, setup):
         obj_weight = compute_obj_weight(pf, aspiration)
         query_idx, query_pt = mrs.get_query_point(info["data"], aspiration, info["iqr"])
 
+        change_scale = CYCLE_DAMP if damp_next else 1.0
+        if damp_next:
+            print(f"outer cycle previously detected; damping change by {CYCLE_DAMP}")
+        damp_next = False
+
         # run inner loop once during each outer loop
         final_idx, final_pt, records, stop_reason = run_inner_loop(
-            info, mrs_params, aspiration, obj_weight, 
-            query_idx, query_pt, 1, outer_dir, outer_i
+            info, mrs_params, aspiration, obj_weight,
+            query_idx, query_pt, 1, outer_dir, outer_i,
+            change_scale=change_scale,
         )
         all_records.extend(records)
+
+        # Next aspiration is the (unsnapped) target of the last inner step, so the
+        # aspiration moves continuously and step size / damping take effect.
+        # Fall back to the snapped point if the last step produced no target.
+        target = records[-1]["target"] if records else None
+        used_target = target is not None
+        next_aspiration = target if used_target else final_pt
+
+        new_key = point_key(next_aspiration)
+        # Same idea as the inner-loop visited check: revisit => cycle.
+        cycle_detected = new_key in visited
+        if cycle_detected:
+            damp_next = True
+            print(
+                f"outer cycle detected at {np.round(next_aspiration, OUTER_CYCLE_ROUND)}; "
+                f"next change will be damped by {CYCLE_DAMP}"
+            )
+        visited.add(new_key)
 
         # extra information for outer loop
         outer_summary.append({
             "pf_size": len(pf),
             "n_inner_steps": len(records),
             "inner_stop_reason": stop_reason,
+            "change_scale": change_scale,
+            "cycle_detected": cycle_detected,
+            "used_target": used_target,
+            "next_aspiration": np.asarray(next_aspiration, dtype=float).copy(),
         })
 
-        aspiration = final_pt.astype(float).copy()
+        aspiration = np.asarray(next_aspiration, dtype=float).copy()
 
     save_records(all_records, run_dir / "outer_records.pkl")
     return all_records, outer_summary

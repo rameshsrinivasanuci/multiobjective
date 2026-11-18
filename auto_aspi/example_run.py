@@ -34,7 +34,8 @@ def make_setup():
         "n_selected": 10,
         "n_obj": len(obj_names),
         "obj_names": obj_names,
-        "aspiration": np.array([120.8, 38.1, 21.1, 13.5, 211.4]),
+        "aspiration": np.array([120.8, 38.1, 21.1, 13.5, 211.4]), # trial17
+        # "aspiration": np.array([109.88, 42.28, 15.98, 25.06, 186.81]), # trial16
     }
 
 
